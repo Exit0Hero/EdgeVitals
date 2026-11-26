@@ -6,6 +6,8 @@ export type CameraStatus =
 export interface CameraScannerProps {
   /** Capture runs only while true; turning it off stops the camera and releases it. */
   active: boolean;
+  /** Diagnostic mode: show the camera preview without frame output or face detection. */
+  enableProcessing?: boolean;
   /** Called once per processed frame with aggregate statistics only (no pixels). */
   onFrame: (f: FrameInput) => void;
   onStatus: (s: CameraStatus, detail?: string) => void;
