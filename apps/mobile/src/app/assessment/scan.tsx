@@ -5,7 +5,7 @@ import { AccessibilityInfo, AppState, Linking, Platform, Pressable, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError } from '../../api/client';
 import { CameraScanner } from '../../camera/CameraScanner';
-import type { CameraStatus } from '../../camera/types';
+import type { CameraProcessingMode, CameraStatus } from '../../camera/types';
 import { Icon } from '../../components/Icon';
 import { PrimaryButton, T, TextButton } from '../../components/ui';
 import { deviceTimeZone, uuid } from '../../lib/id';
@@ -36,6 +36,14 @@ export default function Scan() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [error, setError] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
+  // On Android, open the previously verified safe preview first. Native frame processing
+  // is opt-in until physical-device testing proves it no longer shuts down the app.
+  const [diagnosticMode, setDiagnosticMode] = useState<CameraProcessingMode>(
+    Platform.OS === 'android' ? 'preview' : 'full',
+  );
+  const [diagnosticText, setDiagnosticText] = useState('');
+  const lastDiagnosticUpdate = useRef(-Infinity);
+  const previewOnly = diagnosticMode !== 'full';
   const finishing = useRef(false);
 
   useEffect(() => {
@@ -87,6 +95,18 @@ export default function Scan() {
   const onFrame = useCallback(
     (f: Parameters<ScanSession['pushFrame']>[0]) => {
       const s = session.current;
+      if (previewOnly) {
+        // Throttle diagnostic status updates: never run the vital-sign session.
+        if (f.t - lastDiagnosticUpdate.current >= 1000) {
+          lastDiagnosticUpdate.current = f.t;
+          setDiagnosticText(
+            diagnosticMode === 'frames'
+              ? 'Receiving camera frames without face detection.'
+              : `${f.faces.length} face(s) detected; YUV sampling disabled.`,
+          );
+        }
+        return;
+      }
       if (!s || finishing.current) return;
       try {
         s.pushFrame(f);
@@ -95,21 +115,32 @@ export default function Scan() {
       }
       if (s.shouldFinish()) submit(false);
     },
-    [submit],
+    [submit, previewOnly, diagnosticMode],
   );
 
   const onStatus = useCallback(
     (s: CameraStatus, detail?: string) => {
+      // If the processing pipeline reports a recoverable error, immediately return
+      // to preview-only mode instead of unmounting the entire camera view.
+      if ((s === 'error' || s === 'unavailable') && diagnosticMode !== 'preview') {
+        setDiagnosticMode('preview');
+        setDiagnosticText(detail ?? 'Processing stopped. Camera preview remains available.');
+        session.current = new ScanSession();
+        setLive(null);
+        setPhase('camera');
+        return;
+      }
       setCamStatus(s);
       setCamDetail(detail);
       if (s === 'running') {
         setPhase('scanning');
-        if (a?.assessmentId) api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
+        if (!previewOnly && a?.assessmentId)
+          api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
       }
       if (s === 'requesting' && a?.assessmentId)
         api.setStatus(a.assessmentId, 'permission_pending').catch(() => undefined);
     },
-    [a],
+    [a, previewOnly, diagnosticMode],
   );
 
   // Refresh the live view 4x per second from real session state.
@@ -140,6 +171,21 @@ export default function Scan() {
     setLive(null);
     setPhase('camera');
     setCamStatus('idle');
+    setDiagnosticMode(Platform.OS === 'android' ? 'preview' : 'full');
+    setDiagnosticText('');
+  };
+
+  const testStage = (stage: CameraProcessingMode) => {
+    session.current = new ScanSession();
+    finishing.current = false;
+    setError(null);
+    setLive(null);
+    setDiagnosticMode(stage);
+    lastDiagnosticUpdate.current = -Infinity;
+    setDiagnosticText('');
+    setCamDetail(undefined);
+    setCamStatus('idle');
+    setPhase('camera');
   };
 
   const showDemo = async () => {
@@ -209,11 +255,15 @@ export default function Scan() {
       ? 'Waiting for camera permission…'
       : camStatus === 'loading_detector'
         ? 'Starting face detection…'
-        : phase === 'scanning' && live
-          ? live.guidance
-          : phase === 'scanning'
-            ? 'Looking for your face…'
-            : '';
+        : previewOnly && camStatus === 'running'
+          ? diagnosticMode === 'preview'
+            ? diagnosticText || 'Camera ready. Measurements have not started.'
+            : diagnosticText || 'Waiting for camera frames…'
+          : phase === 'scanning' && live
+            ? live.guidance
+            : phase === 'scanning'
+              ? 'Looking for your face…'
+              : '';
   const headline =
     q === 'ready' ? 'Keep still' : q === 'motion_too_high' ? 'Hold still' : 'Position your face';
   const elapsed = live ? Math.floor(live.elapsedSec) : 0;
@@ -251,7 +301,12 @@ export default function Scan() {
       </View>
 
       {blocked ? (
-        <CameraBlocked status={camStatus} detail={camDetail} onRetry={restart} />
+        <CameraBlocked
+          status={camStatus}
+          detail={camDetail}
+          onRetry={restart}
+          onTestStage={testStage}
+        />
       ) : (
         <>
           <View style={{ alignItems: 'center', marginTop: space[8] }}>
@@ -264,7 +319,10 @@ export default function Scan() {
               }}
             >
               <CameraScanner
+                key={diagnosticMode}
                 active={phase === 'camera' || phase === 'scanning'}
+                enableProcessing={!previewOnly || diagnosticMode !== 'preview'}
+                processingMode={diagnosticMode}
                 onFrame={onFrame}
                 onStatus={onStatus}
                 size={PREVIEW}
@@ -299,7 +357,11 @@ export default function Scan() {
               }}
             >
               <T variant="heading" style={{ fontSize: 17 }}>
-                {phase === 'submitting' ? 'Analysing…' : 'Measuring 3 of 5 vital signs'}
+                {previewOnly
+                  ? 'Camera preview test — no measurements'
+                  : phase === 'submitting'
+                    ? 'Analysing…'
+                    : 'Measuring 3 of 5 vital signs'}
               </T>
               <T variant="small" color={colors.muted} testID="scan-elapsed">
                 {live
@@ -378,7 +440,30 @@ export default function Scan() {
                 },
               )}
             </View>
-            {demoEnabled ? (
+            {diagnosticMode === 'preview' ? (
+              <PrimaryButton
+                label="Start measurements (experimental)"
+                onPress={() => testStage('full')}
+                testID="start-measurements"
+              />
+            ) : null}
+            <TextButton
+              label="Test camera preview only (no measurements)"
+              onPress={() => testStage('preview')}
+              testID="camera-preview-test"
+            />
+            <TextButton
+              label="Test frame output (no face detection)"
+              onPress={() => testStage('frames')}
+              testID="camera-frame-test"
+            />
+            <TextButton
+              label="Test face detection (no YUV sampling)"
+              onPress={() => testStage('face')}
+              testID="camera-face-test"
+            />
+            {previewOnly ? <TextButton label="Return to normal scan" onPress={restart} /> : null}
+            {demoEnabled && !previewOnly ? (
               <TextButton
                 label="Show demo results (simulated)"
                 onPress={showDemo}
@@ -396,10 +481,12 @@ function CameraBlocked({
   status,
   detail,
   onRetry,
+  onTestStage,
 }: {
   status: CameraStatus;
   detail?: string;
   onRetry: () => void;
+  onTestStage: (stage: CameraProcessingMode) => void;
 }) {
   const denied = status === 'denied';
   return (
@@ -420,6 +507,13 @@ function CameraBlocked({
         <PrimaryButton label="Open settings" onPress={() => Linking.openSettings()} />
       ) : null}
       <PrimaryButton label="Try again" onPress={onRetry} testID="camera-retry" />
+      {!denied ? (
+        <>
+          <TextButton label="Test preview only" onPress={() => onTestStage('preview')} />
+          <TextButton label="Test frame output" onPress={() => onTestStage('frames')} />
+          <TextButton label="Test face detection" onPress={() => onTestStage('face')} />
+        </>
+      ) : null}
       <TextButton
         label="Back to Today"
         color={colors.scanText}
