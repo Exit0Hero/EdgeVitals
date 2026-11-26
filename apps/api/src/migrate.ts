@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import type { Queryable } from './db';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
@@ -29,7 +30,7 @@ export async function migrate(
         r.checksum,
       ]),
     );
-    const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
+    const files = await migrationFiles();
     const ran: string[] = [];
     for (const file of files) {
       const sql = await readFile(join(MIGRATIONS_DIR, file), 'utf8');
@@ -59,4 +60,28 @@ export async function migrate(
     await client.query('SELECT pg_advisory_unlock(727274)').catch(() => {});
     await client.end();
   }
+}
+
+/** Migration files shipped with this build, in apply order. */
+export async function migrationFiles(): Promise<string[]> {
+  return (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
+}
+
+/**
+ * Migrations in this build that the database has not applied yet. Used by the
+ * readiness probe so an instance never takes traffic on an out-of-date schema
+ * (for example when MIGRATE_ON_START=false and the release job has not run).
+ */
+export async function pendingMigrations(db: Queryable): Promise<string[]> {
+  const { rows } = await db.query<{ exists: boolean }>(
+    "SELECT to_regclass('public.schema_migrations') IS NOT NULL AS exists",
+  );
+  const files = await migrationFiles();
+  if (!rows[0]?.exists) return files;
+  const applied = new Set(
+    (await db.query<{ name: string }>('SELECT name FROM schema_migrations')).rows.map(
+      (r) => r.name,
+    ),
+  );
+  return files.filter((f) => !applied.has(f));
 }
