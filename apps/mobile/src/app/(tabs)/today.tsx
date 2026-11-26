@@ -9,6 +9,7 @@ import { Card, ErrorState, Loading, PrimaryButton, StatusPill, T } from '../../c
 import { VitalChips, VitalTiles } from '../../components/vitals';
 import { greeting, longDate, relativeWhen } from '../../lib/format';
 import { useSession } from '../../state/session';
+import { useReminderSync } from '../../state/useReminderSync';
 import { colors, radius, space } from '../../theme/tokens';
 
 export function useDashboard() {
@@ -49,6 +50,7 @@ const ENERGY_COPY: Record<string, string> = {
 export default function Today() {
   const { data, error, loading, reload } = useDashboard();
   const { me } = useSession();
+  useReminderSync(data?.today);
   const now = new Date();
 
   if (!data && loading) return <Loading label="Loading today" />;
