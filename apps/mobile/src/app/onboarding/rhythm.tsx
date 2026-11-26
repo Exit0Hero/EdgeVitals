@@ -12,6 +12,7 @@ import {
   T,
 } from '../../components/ui';
 import { deviceTimeZone } from '../../lib/id';
+import { requestReminderPermission } from '../../lib/reminders';
 import { useFlow } from '../../state/flow';
 import { useSession } from '../../state/session';
 import { colors, space } from '../../theme/tokens';
@@ -30,11 +31,14 @@ export default function Rhythm() {
     setBusy(true);
     setError(null);
     try {
+      // Ask for notifications here, where the screen has just promised reminders.
+      // Declining keeps reminders off; it can be changed in Settings.
+      const permission = await requestReminderPermission().catch(() => 'denied' as const);
       await api.saveSchedule({
         morning_time: s.morning_time,
         evening_time: s.evening_time,
         timezone: deviceTimeZone(),
-        reminders_enabled: true,
+        reminders_enabled: permission !== 'denied',
         heart_rate_affecting_substance: s.heart_rate_affecting_substance,
       });
       await refreshMe();

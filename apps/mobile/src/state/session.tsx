@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, client, type Me } from '../api/client';
+import { cancelReminders } from '../lib/reminders';
 import { tokenStore } from '../lib/secureStore';
 
 type Status = 'loading' | 'signedOut' | 'signedIn';
@@ -47,6 +48,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
     const off = client.onAuthChange((signedIn) => {
       if (!signedIn) {
+        // No reminders for a signed-out (or deleted) account on this device.
+        cancelReminders().catch(() => undefined);
         setMe(null);
         setStatus('signedOut');
       }

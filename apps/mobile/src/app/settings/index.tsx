@@ -1,7 +1,7 @@
 import { CONSENT_POLICY_VERSION, profileSchema } from '@edgevitals/domain';
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Linking, Pressable, View } from 'react-native';
 import { api, ApiError } from '../../api/client';
 import { TimeField } from '../../components/TimeField';
 import {
@@ -16,6 +16,12 @@ import {
   TextButton,
 } from '../../components/ui';
 import { deviceTimeZone, uuid } from '../../lib/id';
+import {
+  reminderPermission,
+  remindersSupported,
+  requestReminderPermission,
+  type ReminderPermission,
+} from '../../lib/reminders';
 import { saveExport } from '../../lib/saveExport';
 import { useSession } from '../../state/session';
 import { colors, space } from '../../theme/tokens';
@@ -45,6 +51,12 @@ export default function Settings() {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
+  const [notif, setNotif] = useState<ReminderPermission>('undetermined');
+  useEffect(() => {
+    reminderPermission()
+      .then(setNotif)
+      .catch(() => setNotif('unsupported'));
+  }, []);
 
   if (!me) return null;
 
@@ -218,12 +230,34 @@ export default function Settings() {
           <Segmented
             label="Reminders"
             value={schedule.reminders_enabled ? 'on' : 'off'}
-            onChange={(v) => setSchedule({ ...schedule, reminders_enabled: v === 'on' })}
+            onChange={async (v) => {
+              if (v === 'on' && remindersSupported) {
+                const p = await requestReminderPermission().catch(() => 'denied' as const);
+                setNotif(p);
+                if (p === 'denied') return; // explained below; nothing would arrive
+              }
+              setSchedule({ ...schedule, reminders_enabled: v === 'on' });
+            }}
             options={[
               { value: 'on', label: 'Reminders on' },
               { value: 'off', label: 'Reminders off' },
             ]}
           />
+          <T
+            variant="small"
+            color={colors.muted}
+            style={{ marginTop: space[2] }}
+            testID="reminder-note"
+          >
+            {!remindersSupported
+              ? 'Reminders arrive through the EdgeVitals app on iPhone and Android.'
+              : notif === 'denied'
+                ? 'Notifications are turned off for EdgeVitals in your phone settings.'
+                : 'Reminders come from this phone at your local time and skip scans you have already done.'}
+          </T>
+          {remindersSupported && notif === 'denied' ? (
+            <TextButton label="Open phone settings" onPress={() => Linking.openSettings()} />
+          ) : null}
           <View style={{ height: space[3] }} />
           <PrimaryButton
             label="Save schedule"
