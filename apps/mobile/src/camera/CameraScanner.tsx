@@ -93,7 +93,10 @@ export function CameraScanner({
       // Device enumeration is asynchronous. A temporary null device does not
       // mean camera permission was revoked or the camera was switched off.
       const timeout = setTimeout(() => {
-        cb.current.onStatus('unavailable', 'Front camera not detected. Check the Android camera access toggle and try again.');
+        cb.current.onStatus(
+          'unavailable',
+          'Front camera not detected. Check the Android camera access toggle and try again.',
+        );
       }, 4000);
       return () => clearTimeout(timeout);
     }
@@ -273,7 +276,9 @@ export function CameraScanner({
           mirrorMode="auto"
           resizeMode="cover"
           onStarted={() => cb.current.onStatus('running')}
-          onError={(e) => cb.current.onStatus('error', `Camera initialization failed: ${e.message}`)}
+          onError={(e) =>
+            cb.current.onStatus('error', `Camera initialization failed: ${e.message}`)
+          }
           onInterruptionStarted={() =>
             cb.current.onStatus(
               'error',
