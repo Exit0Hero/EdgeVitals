@@ -300,8 +300,9 @@ export const api = {
   exportUrl: (id: string) => `${API_URL}/api/v1/me/export/${id}/download`,
   downloadExport: (id: string) =>
     client.request<unknown>('GET', `/api/v1/me/export/${id}/download`),
-  deleteAccount: () =>
+  deleteAccount: (password: string) =>
     client.request<{ id: string; status: string }>('POST', '/api/v1/me/deletion-request', {
       confirm: 'DELETE',
+      password,
     }),
 };

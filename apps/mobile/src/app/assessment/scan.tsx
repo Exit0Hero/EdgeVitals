@@ -1,7 +1,7 @@
 import { ScanSession, type LiveScanState } from '@edgevitals/measurement';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, View } from 'react-native';
+import { AccessibilityInfo, AppState, Linking, Platform, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError } from '../../api/client';
 import { CameraScanner } from '../../camera/CameraScanner';
@@ -270,19 +270,7 @@ export default function Scan() {
                 size={PREVIEW}
               />
             </View>
-            <View
-              accessibilityLiveRegion="polite"
-              style={{ marginTop: space[5], minHeight: 44, paddingHorizontal: space[6] }}
-            >
-              <T
-                variant="body"
-                color={q === 'ready' ? colors.scanText : '#F5C38B'}
-                style={{ textAlign: 'center' }}
-                testID="quality-status"
-              >
-                {statusText}
-              </T>
-            </View>
+            <LiveStatus text={statusText} ok={q === 'ready'} />
             {error ? (
               <View style={{ paddingHorizontal: space[6], alignItems: 'center', gap: space[3] }}>
                 <T variant="body" color="#F5C38B" style={{ textAlign: 'center' }}>
@@ -437,6 +425,35 @@ function CameraBlocked({
         color={colors.scanText}
         onPress={() => router.dismissTo('/today')}
       />
+    </View>
+  );
+}
+
+/**
+ * Framing guidance, announced to screen readers when it changes: a live
+ * region on Android and web, an explicit announcement on iOS (no live regions).
+ */
+function LiveStatus({ text, ok }: { text: string; ok: boolean }) {
+  const last = useRef('');
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !text || text === last.current) return;
+    last.current = text;
+    AccessibilityInfo.announceForAccessibility(text);
+  }, [text]);
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      aria-live="polite"
+      style={{ marginTop: space[5], minHeight: 44, paddingHorizontal: space[6] }}
+    >
+      <T
+        variant="body"
+        color={ok ? colors.scanText : '#F5C38B'}
+        style={{ textAlign: 'center' }}
+        testID="quality-status"
+      >
+        {text}
+      </T>
     </View>
   );
 }

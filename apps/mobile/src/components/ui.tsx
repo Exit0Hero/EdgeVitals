@@ -101,6 +101,8 @@ export function PrimaryButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
+      aria-disabled={!!inactive}
+      aria-busy={!!loading}
       disabled={inactive}
       onPress={onPress}
       testID={testID}
@@ -283,6 +285,7 @@ export function Checkbox({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
+      aria-checked={checked}
       accessibilityLabel={accessibilityLabel}
       onPress={onToggle}
       testID={testID}
@@ -332,6 +335,7 @@ export function Segmented<V extends string>({
             key={o.value}
             accessibilityRole="radio"
             accessibilityState={{ selected, checked: selected }}
+            aria-checked={selected}
             accessibilityLabel={o.label}
             onPress={() => onChange(o.value)}
             testID={testID ? `${testID}-${o.value}` : undefined}
@@ -385,6 +389,7 @@ export function RatingScale({
               key={n}
               accessibilityRole="radio"
               accessibilityState={{ selected, checked: selected }}
+              aria-checked={selected}
               accessibilityLabel={`${n}${desc}`}
               onPress={() => onChange(n)}
               testID={testID ? `${testID}-${n}` : undefined}
@@ -433,7 +438,7 @@ export function Field({
       ) : null}
       <View style={[styles.input, error ? { borderColor: colors.danger } : null]}>
         <TextInput
-          placeholderTextColor={colors.subtle}
+          placeholderTextColor={colors.muted}
           style={styles.inputText}
           accessibilityLabel={label}
           testID={testID}

@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, request, test, type APIRequestContext } from '@playwright/test';
 import pg from 'pg';
 
@@ -118,10 +119,13 @@ test('a mature history shows scores, a trend chart and an insight', async ({ pag
   await expect(page.getByTestId('streak')).toBeVisible();
   if (shots) await page.screenshot({ path: `${shots}/10-today-mature.png`, fullPage: true });
 
-  await page.getByRole('tab', { name: /trends/i }).click();
+  await page.getByRole('link', { name: 'Trends', exact: true }).click();
   await expect(page.getByTestId('trend-average')).toContainText('ms');
   await expect(page.getByTestId('sample-count')).toContainText('23 readings');
   if (shots) await page.screenshot({ path: `${shots}/12-trends-mature.png` });
+
+  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(axe.violations.map((v) => v.id)).toEqual([]);
 
   await page.getByTestId('metric-recovery').click();
   await expect(page.getByTestId('trend-average')).not.toHaveText('—');

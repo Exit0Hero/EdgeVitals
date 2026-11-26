@@ -118,7 +118,7 @@ test('demo results are labelled simulated and stay out of Today and Trends', asy
   await shot(page, '11-checkin-evening');
   await page.goto('/today');
 
-  await page.getByRole('tab', { name: /trends/i }).click();
+  await page.getByRole('link', { name: 'Trends', exact: true }).click();
   await expect(page.getByTestId('screen-trends')).toBeVisible();
   await expect(page.getByTestId('sample-count')).toBeVisible();
   // Demo readings are simulated and never count toward real trends.
