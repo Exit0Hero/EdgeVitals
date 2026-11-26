@@ -103,7 +103,16 @@ export async function buildApp(
       .send({ error: { code: 'not_found', message: 'Route not found', request_id: req.id } }),
   );
 
+  // Liveness: the process is up. Readiness: it can also reach the database.
   app.get('/health', async () => ({ ok: true }));
+  app.get('/ready', async (_req, reply) => {
+    try {
+      await db.query('SELECT 1');
+      return { ok: true };
+    } catch {
+      return reply.status(503).send({ ok: false, error: { code: 'db_unavailable' } });
+    }
+  });
   app.get('/api/v1/config', async () => ({
     hosting_region: config.hostingRegion,
     demo_mode_enabled: config.demoModeEnabled,

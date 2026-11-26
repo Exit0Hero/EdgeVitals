@@ -5,11 +5,34 @@ import { View } from 'react-native';
 import type { CameraScannerProps } from './types';
 
 // Metro cannot bundle the MediaPipe ES module (it contains a computed dynamic
-// import), so it is served from public/mediapipe and loaded at runtime. The
-// Function wrapper keeps Metro from trying to resolve the URL at build time.
-const runtimeImport = new Function('u', 'return import(u)') as (
-  u: string,
-) => Promise<typeof Vision>;
+// import), so it is served from public/mediapipe and loaded at runtime through
+// a same-origin module script (public/mediapipe/loader.mjs). This needs no
+// eval, so the web build runs under a strict Content-Security-Policy.
+type VisionWindow = Window & { __edgevitalsVision?: typeof Vision };
+let visionPromise: Promise<typeof Vision> | null = null;
+
+function loadVision(base: string): Promise<typeof Vision> {
+  const w = window as VisionWindow;
+  if (w.__edgevitalsVision) return Promise.resolve(w.__edgevitalsVision);
+  visionPromise ??= new Promise<typeof Vision>((resolve, reject) => {
+    const done = () => {
+      if (w.__edgevitalsVision) resolve(w.__edgevitalsVision);
+      else reject(new Error('MediaPipe module did not initialise'));
+    };
+    window.addEventListener('edgevitals-vision-ready', done, { once: true });
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.src = `${base}/mediapipe/loader.mjs`;
+    s.onerror = () => {
+      window.removeEventListener('edgevitals-vision-ready', done);
+      visionPromise = null;
+      s.remove();
+      reject(new Error('MediaPipe module failed to load'));
+    };
+    document.head.appendChild(s);
+  });
+  return visionPromise;
+}
 
 const BASE = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -64,9 +87,7 @@ export function CameraScanner({ active, onFrame, onStatus, size }: CameraScanner
 
       cb.current.onStatus('loading_detector');
       try {
-        const { FaceDetector, FilesetResolver } = await runtimeImport(
-          `${BASE}/mediapipe/vision_bundle.mjs`,
-        );
+        const { FaceDetector, FilesetResolver } = await loadVision(BASE);
         const fileset = await FilesetResolver.forVisionTasks(`${BASE}/mediapipe/wasm`);
         detector = await FaceDetector.createFromOptions(fileset, {
           baseOptions: {

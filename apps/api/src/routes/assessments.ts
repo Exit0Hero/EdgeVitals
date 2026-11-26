@@ -76,6 +76,13 @@ async function present(db: Queryable, a: Record<string, unknown>) {
   };
 }
 
+/** Health data is only accepted while the required consents are active (withdrawal stops collection). */
+async function requireConsent(db: Queryable, userId: string) {
+  const consents = await consentState(db, userId);
+  if (!consents.requiredGranted)
+    throw forbidden('consent_required', 'Required consent must be granted before assessments');
+}
+
 export async function assessmentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (req) => {
     await app.authenticate(req);
@@ -87,9 +94,7 @@ export async function assessmentRoutes(app: FastifyInstance) {
     const key = (req.headers['idempotency-key'] as string | undefined)?.slice(0, 100) ?? null;
     if (body.demo && !app.config.demoModeEnabled)
       throw forbidden('demo_disabled', 'Demo mode is not enabled');
-    const consents = await consentState(app.db, uid);
-    if (!consents.requiredGranted)
-      throw forbidden('consent_required', 'Required consent must be granted before assessments');
+    await requireConsent(app.db, uid);
 
     const row = await withTransaction(app.db, async (c) => {
       if (key) {
@@ -187,6 +192,7 @@ export async function assessmentRoutes(app: FastifyInstance) {
   app.post('/:id/check-in', async (req, reply) => {
     const { id } = parse(idParam, req.params);
     const ci = parse(checkInSchema, req.body);
+    await requireConsent(app.db, req.userId!);
     const out = await withTransaction(app.db, async (c) => {
       const a = await getOwned(c, id, req.userId!, true);
       if (a.kind !== ci.kind)
@@ -223,6 +229,7 @@ export async function assessmentRoutes(app: FastifyInstance) {
   app.post('/:id/measurements', async (req, reply) => {
     const { id } = parse(idParam, req.params);
     const body = parse(submitMeasurementsSchema, req.body);
+    await requireConsent(app.db, req.userId!);
     const metrics = body.measurements.map((m) => m.metric);
     if (new Set(metrics).size !== metrics.length)
       throw new ApiError(422, 'validation_failed', 'Duplicate metric');

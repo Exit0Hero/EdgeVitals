@@ -13,8 +13,8 @@ export function BottomNav() {
     const active = path.startsWith(`/${name}`);
     return (
       <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: active }}
+        role="link"
+        aria-current={active ? 'page' : undefined}
         accessibilityLabel={label}
         onPress={() => router.replace(`/${name}`)}
         style={{ flex: 1, alignItems: 'center', paddingTop: 10, minHeight: 56 }}
@@ -33,7 +33,8 @@ export function BottomNav() {
   };
   return (
     <View
-      accessibilityRole="tablist"
+      role="navigation"
+      aria-label="Main"
       style={{
         flexDirection: 'row',
         borderTopWidth: 1,

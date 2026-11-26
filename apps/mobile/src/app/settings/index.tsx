@@ -50,6 +50,7 @@ export default function Settings() {
   const [schedule, setSchedule] = useState(() => me?.schedule ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [notif, setNotif] = useState<ReminderPermission>('undetermined');
   useEffect(() => {
     reminderPermission()
@@ -58,6 +59,14 @@ export default function Settings() {
   }, []);
 
   if (!me) return null;
+
+  // Leave the signed-in screens first, then clear the session, so the tab
+  // layout's own signed-out redirect cannot stack a second welcome screen.
+  const leave = () => {
+    router.dismissAll();
+    router.replace('/welcome');
+    signOut().catch(() => undefined);
+  };
 
   const run = async (key: string, fn: () => Promise<void>, ok: string) => {
     setBusy(key);
@@ -320,27 +329,38 @@ export default function Settings() {
           <T variant="small" color={colors.muted} style={{ marginBottom: space[3] }}>
             Permanently deletes your account, profile, consents, check-ins and all readings. A
             record that a deletion happened is kept without any health data, and encrypted backups
-            expire on our backup schedule. Type DELETE to confirm.
+            expire on our backup schedule. Type DELETE and your password to confirm.
           </T>
           <Field
+            label="Type DELETE"
             value={confirmDelete}
             onChangeText={setConfirmDelete}
             autoCapitalize="characters"
             placeholder="DELETE"
             testID="delete-confirm"
           />
+          <Field
+            label="Password"
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            secureTextEntry
+            autoComplete="current-password"
+            testID="delete-password"
+          />
           <PrimaryButton
             label="Delete my account"
-            disabled={confirmDelete !== 'DELETE'}
+            disabled={confirmDelete !== 'DELETE' || !deletePassword}
             loading={busy === 'delete'}
-            style={{ backgroundColor: confirmDelete === 'DELETE' ? colors.danger : '#E8A39C' }}
+            style={{
+              backgroundColor:
+                confirmDelete === 'DELETE' && deletePassword ? colors.danger : '#E8A39C',
+            }}
             testID="delete-account"
             onPress={async () => {
               setBusy('delete');
               try {
-                await api.deleteAccount();
-                await signOut();
-                router.replace('/welcome');
+                await api.deleteAccount(deletePassword);
+                leave();
               } catch (e) {
                 setMsg({
                   tone: 'danger',
@@ -356,8 +376,7 @@ export default function Settings() {
       <TextButton
         label="Sign out"
         onPress={async () => {
-          await signOut();
-          router.replace('/welcome');
+          leave();
         }}
         testID="sign-out"
       />

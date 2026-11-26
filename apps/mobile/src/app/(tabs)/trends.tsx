@@ -84,6 +84,7 @@ export default function Trends() {
                 key={x.id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: sel }}
+                aria-selected={sel}
                 onPress={() => setMetric(x.id)}
                 testID={`metric-${x.id}`}
                 style={{
