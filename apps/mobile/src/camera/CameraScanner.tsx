@@ -60,7 +60,13 @@ interface NativeFrameResult {
   unsupported?: string;
 }
 
-export function CameraScanner({ active, onFrame, onStatus, size }: CameraScannerProps) {
+export function CameraScanner({
+  active,
+  enableProcessing = true,
+  onFrame,
+  onStatus,
+  size,
+}: CameraScannerProps) {
   const permission = useCameraPermission();
   const device = useCameraDevice('front');
   const detector = useFaceDetector(DETECTOR_OPTIONS);
@@ -212,7 +218,10 @@ export function CameraScanner({ active, onFrame, onStatus, size }: CameraScanner
     },
   });
 
-  const outputs = useMemo(() => [frameOutput], [frameOutput]);
+  const outputs = useMemo(
+    () => (enableProcessing ? [frameOutput] : []),
+    [enableProcessing, frameOutput],
+  );
   const ready = active && permission.hasPermission && !!device;
 
   return (

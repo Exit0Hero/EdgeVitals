@@ -36,6 +36,7 @@ export default function Scan() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [error, setError] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
+  const [previewOnly, setPreviewOnly] = useState(false);
   const finishing = useRef(false);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export default function Scan() {
   const onFrame = useCallback(
     (f: Parameters<ScanSession['pushFrame']>[0]) => {
       const s = session.current;
-      if (!s || finishing.current) return;
+      if (!s || finishing.current || previewOnly) return;
       try {
         s.pushFrame(f);
       } catch {
@@ -95,7 +96,7 @@ export default function Scan() {
       }
       if (s.shouldFinish()) submit(false);
     },
-    [submit],
+    [submit, previewOnly],
   );
 
   const onStatus = useCallback(
@@ -104,12 +105,13 @@ export default function Scan() {
       setCamDetail(detail);
       if (s === 'running') {
         setPhase('scanning');
-        if (a?.assessmentId) api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
+        if (!previewOnly && a?.assessmentId)
+          api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
       }
       if (s === 'requesting' && a?.assessmentId)
         api.setStatus(a.assessmentId, 'permission_pending').catch(() => undefined);
     },
-    [a],
+    [a, previewOnly],
   );
 
   // Refresh the live view 4x per second from real session state.
@@ -140,6 +142,18 @@ export default function Scan() {
     setLive(null);
     setPhase('camera');
     setCamStatus('idle');
+    setPreviewOnly(false);
+  };
+
+  const testPreview = () => {
+    session.current = new ScanSession();
+    finishing.current = false;
+    setError(null);
+    setLive(null);
+    setPreviewOnly(true);
+    setCamDetail(undefined);
+    setCamStatus('idle');
+    setPhase('camera');
   };
 
   const showDemo = async () => {
@@ -209,11 +223,13 @@ export default function Scan() {
       ? 'Waiting for camera permission…'
       : camStatus === 'loading_detector'
         ? 'Starting face detection…'
-        : phase === 'scanning' && live
-          ? live.guidance
-          : phase === 'scanning'
-            ? 'Looking for your face…'
-            : '';
+        : previewOnly && camStatus === 'running'
+          ? 'Camera preview is running (face processing disabled).'
+          : phase === 'scanning' && live
+            ? live.guidance
+            : phase === 'scanning'
+              ? 'Looking for your face…'
+              : '';
   const headline =
     q === 'ready' ? 'Keep still' : q === 'motion_too_high' ? 'Hold still' : 'Position your face';
   const elapsed = live ? Math.floor(live.elapsedSec) : 0;
@@ -251,7 +267,12 @@ export default function Scan() {
       </View>
 
       {blocked ? (
-        <CameraBlocked status={camStatus} detail={camDetail} onRetry={restart} />
+        <CameraBlocked
+          status={camStatus}
+          detail={camDetail}
+          onRetry={restart}
+          onTestPreview={testPreview}
+        />
       ) : (
         <>
           <View style={{ alignItems: 'center', marginTop: space[8] }}>
@@ -265,6 +286,7 @@ export default function Scan() {
             >
               <CameraScanner
                 active={phase === 'camera' || phase === 'scanning'}
+                enableProcessing={!previewOnly}
                 onFrame={onFrame}
                 onStatus={onStatus}
                 size={PREVIEW}
@@ -299,7 +321,11 @@ export default function Scan() {
               }}
             >
               <T variant="heading" style={{ fontSize: 17 }}>
-                {phase === 'submitting' ? 'Analysing…' : 'Measuring 3 of 5 vital signs'}
+                {previewOnly
+                  ? 'Camera preview test — no measurements'
+                  : phase === 'submitting'
+                    ? 'Analysing…'
+                    : 'Measuring 3 of 5 vital signs'}
               </T>
               <T variant="small" color={colors.muted} testID="scan-elapsed">
                 {live
@@ -378,7 +404,16 @@ export default function Scan() {
                 },
               )}
             </View>
-            {demoEnabled ? (
+            {previewOnly ? (
+              <TextButton label="Exit preview test" onPress={restart} />
+            ) : (
+              <TextButton
+                label="Test camera preview only (no measurements)"
+                onPress={testPreview}
+                testID="camera-preview-test"
+              />
+            )}
+            {demoEnabled && !previewOnly ? (
               <TextButton
                 label="Show demo results (simulated)"
                 onPress={showDemo}
@@ -396,10 +431,12 @@ function CameraBlocked({
   status,
   detail,
   onRetry,
+  onTestPreview,
 }: {
   status: CameraStatus;
   detail?: string;
   onRetry: () => void;
+  onTestPreview: () => void;
 }) {
   const denied = status === 'denied';
   return (
@@ -420,6 +457,13 @@ function CameraBlocked({
         <PrimaryButton label="Open settings" onPress={() => Linking.openSettings()} />
       ) : null}
       <PrimaryButton label="Try again" onPress={onRetry} testID="camera-retry" />
+      {!denied ? (
+        <TextButton
+          label="Test camera preview only (no face detection)"
+          onPress={onTestPreview}
+          testID="camera-preview-test"
+        />
+      ) : null}
       <TextButton
         label="Back to Today"
         color={colors.scanText}
