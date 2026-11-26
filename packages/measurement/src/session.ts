@@ -1,6 +1,6 @@
 import { PIPELINE_CONFIG } from './config';
 import { FLAG_GUIDANCE, assessFrame } from './frameQuality';
-import { analyzeSession, SUPPORTED_METRICS } from './pipeline';
+import { analyzeSession, longestUsableSegment, SUPPORTED_METRICS } from './pipeline';
 import type {
   FaceBox,
   FrameQualityFlag,
@@ -45,11 +45,6 @@ export class ScanSession {
   private lastInterimAt = 0;
   private interimHr: number | null = null;
   private done = false;
-  // Maintain progress incrementally rather than rescanning every captured frame.
-  private previousFace: { t: number; face: FaceBox } | null = null;
-  private currentUsableStart: number | null = null;
-  private currentUsableEnd: number | null = null;
-  private bestUsableMs = 0;
 
   constructor(
     private readonly targetUsableSec: number = PIPELINE_CONFIG.targetUsableSec,
@@ -63,9 +58,10 @@ export class ScanSession {
   pushFrame(input: FrameInput): FrameSample {
     if (this.done) throw new Error('ScanSession already finished');
     if (this.startT === null) this.startT = input.t;
+    const prev = [...this.frames].reverse().find((f) => f.face);
     const flags = assessFrame({
       ...input,
-      previous: this.previousFace,
+      previous: prev?.face ? { t: prev.t, face: prev.face } : null,
     });
     const sample: FrameSample = {
       t: input.t,
@@ -78,27 +74,12 @@ export class ScanSession {
       usable: flags.length === 0 && !!input.roi,
     };
     this.frames.push(sample);
-    if (sample.face) this.previousFace = { t: sample.t, face: sample.face };
-    const gapMs = PIPELINE_CONFIG.maxGapSec * 1000;
-    if (!sample.usable || !sample.roi) {
-      this.currentUsableStart = null;
-      this.currentUsableEnd = null;
-    } else {
-      if (
-        this.currentUsableStart === null ||
-        this.currentUsableEnd === null ||
-        sample.t - this.currentUsableEnd > gapMs
-      ) {
-        this.currentUsableStart = sample.t;
-      }
-      this.currentUsableEnd = sample.t;
-      this.bestUsableMs = Math.max(this.bestUsableMs, sample.t - this.currentUsableStart);
-    }
     return sample;
   }
 
   private usableSec(): number {
-    return this.bestUsableMs / 1000;
+    const seg = longestUsableSegment(this.frames);
+    return seg.length > 1 ? (seg[seg.length - 1]!.t - seg[0]!.t) / 1000 : 0;
   }
 
   liveState(): LiveScanState {
@@ -178,9 +159,5 @@ export class ScanSession {
     this.frames = [];
     this.done = true;
     this.interimHr = null;
-    this.previousFace = null;
-    this.currentUsableStart = null;
-    this.currentUsableEnd = null;
-    this.bestUsableMs = 0;
   }
 }
