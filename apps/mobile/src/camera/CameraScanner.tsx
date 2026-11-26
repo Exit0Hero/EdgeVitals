@@ -63,10 +63,12 @@ interface NativeFrameResult {
 export function CameraScanner({
   active,
   enableProcessing = true,
+  processingMode = 'full',
   onFrame,
   onStatus,
   size,
 }: CameraScannerProps) {
+  const mode = enableProcessing ? processingMode : 'preview';
   const permission = useCameraPermission();
   const device = useCameraDevice('front');
   const detector = useFaceDetector(DETECTOR_OPTIONS);
@@ -133,6 +135,19 @@ export function CameraScanner({
         'worklet';
         try {
           const rawRotation = orientationToRotation(frame.orientation);
+          // Isolate the frame-output path from face detection and YUV access.
+          // In diagnostic modes no pixel buffers leave the frame thread.
+          if (mode === 'frames') {
+            const up = uprightSize(frame.width, frame.height, rawRotation);
+            scheduleOnRN(deliver, {
+              ts: frame.timestamp,
+              faces: [],
+              roi: null,
+              frameWidth: up.width,
+              frameHeight: up.height,
+            });
+            return;
+          }
           const faces = detector.detectFaces(frame);
           const boxes: FaceBox[] = [];
           let rotation: Rotation = rawRotation;
@@ -159,6 +174,16 @@ export function CameraScanner({
           const up = uprightSize(frame.width, frame.height, rotation);
           let roi: RoiSample | null = null;
           let unsupported: string | undefined;
+          if (mode === 'face') {
+            scheduleOnRN(deliver, {
+              ts: frame.timestamp,
+              faces: boxes,
+              roi: null,
+              frameWidth: up.width,
+              frameHeight: up.height,
+            });
+            return;
+          }
           const fmt = frame.pixelFormat;
           const is420 = fmt === 'yuv-420-8-bit-full' || fmt === 'yuv-420-8-bit-video';
           if (!is420 || !frame.isPlanar) {
@@ -218,10 +243,7 @@ export function CameraScanner({
     },
   });
 
-  const outputs = useMemo(
-    () => (enableProcessing ? [frameOutput] : []),
-    [enableProcessing, frameOutput],
-  );
+  const outputs = useMemo(() => (mode === 'preview' ? [] : [frameOutput]), [mode, frameOutput]);
   const ready = active && permission.hasPermission && !!device;
 
   return (
