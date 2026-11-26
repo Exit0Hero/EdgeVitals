@@ -1,0 +1,40 @@
+# Render Blueprint for the EdgeVitals STAGING API (render.com → New → Blueprint,
+# then pick this repository). It creates a managed Postgres 16 database and the
+# API web service from apps/api/Dockerfile, with HTTPS and a readiness check.
+# Render shows the plans and prices before anything is created.
+# See docs/deployment.md for what each variable does.
+databases:
+  - name: edgevitals-staging-db
+    databaseName: edgevitals
+    user: edgevitals
+    postgresMajorVersion: '16'
+    ipAllowList: [] # reachable only from services in this Render account
+
+services:
+  - type: web
+    name: edgevitals-staging-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /ready
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: edgevitals-staging-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: DEMO_MODE_ENABLED
+        value: 'false'
+      # Migrations run at startup under an advisory lock (safe with several
+      # instances). This works on every Render plan; a pre-deploy job is not needed.
+      - key: MIGRATE_ON_START
+        value: 'true'
+      # Render asks for this when the Blueprint is created: enter the region
+      # you choose for the service, e.g. "EU (Frankfurt)". It is shown to users
+      # on the consent screen.
+      - key: HOSTING_REGION
+        sync: false
