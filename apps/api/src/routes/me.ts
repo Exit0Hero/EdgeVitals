@@ -11,7 +11,8 @@ import { z } from 'zod';
 import { audit } from '../audit';
 import type { Queryable } from '../db';
 import { withTransaction } from '../db';
-import { ApiError, notFound } from '../errors';
+import { verifyPassword } from '../auth/passwords';
+import { ApiError, forbidden, notFound } from '../errors';
 import { parse } from '../validate';
 
 const idParam = z.object({ id: z.uuid() });
@@ -217,8 +218,15 @@ export async function meRoutes(app: FastifyInstance) {
   });
 
   // ── export ──
+  /** Expired exports keep no copy of anyone's data. */
+  const purgeExpiredExports = () =>
+    app.db.query(
+      "UPDATE export_jobs SET payload = NULL, status = 'expired' WHERE expires_at < now() AND payload IS NOT NULL",
+    );
+
   app.post('/export', async (req, reply) => {
     const uid = req.userId!;
+    await purgeExpiredExports();
     const key = (req.headers['idempotency-key'] as string | undefined)?.slice(0, 100) ?? null;
     if (key) {
       const { rows } = await app.db.query(
@@ -263,9 +271,16 @@ export async function meRoutes(app: FastifyInstance) {
 
   // ── deletion ──
   app.post('/deletion-request', async (req, reply) => {
-    const body = parse(z.object({ confirm: z.literal('DELETE') }), req.body);
-    void body;
+    const body = parse(
+      z.object({ confirm: z.literal('DELETE'), password: z.string().min(1).max(200) }),
+      req.body,
+    );
     const uid = req.userId!;
+    // Re-authenticate: a stolen access token alone must not be able to erase an account.
+    const { rows: u } = await app.db.query('SELECT password_hash FROM users WHERE id = $1', [uid]);
+    if (!u.length || !(await verifyPassword(u[0].password_hash, body.password)))
+      // 403, not 401: the session is fine, so the app must not sign the person out.
+      throw forbidden('password_incorrect', 'Password is incorrect');
     const job = await withTransaction(app.db, async (c) => {
       const { rows } = await c.query(
         "INSERT INTO deletion_jobs (user_id, status) VALUES ($1, 'pending') RETURNING id",

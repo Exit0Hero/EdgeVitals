@@ -112,6 +112,13 @@ describe('security controls', () => {
     expect(() => loadConfig({ ...base, JWT_SECRET: 'short' })).toThrow(/JWT_SECRET/);
     expect(() => loadConfig({ ...base, DEMO_MODE_ENABLED: 'true' })).toThrow(/DEMO_MODE/);
     expect(() => loadConfig({ ...base, HOSTING_REGION: '' })).toThrow(/HOSTING_REGION/);
+    expect(() => loadConfig({ ...base, CORS_ORIGINS: '*' })).toThrow(/CORS_ORIGINS/);
+    expect(() => loadConfig({ ...base, CORS_ORIGINS: 'http://app.example' })).toThrow(
+      /CORS_ORIGINS/,
+    );
+    expect(loadConfig({ ...base, CORS_ORIGINS: 'https://app.example' }).corsOrigins).toEqual([
+      'https://app.example',
+    ]);
     expect(loadConfig(base).isProduction).toBe(true);
   });
 });
