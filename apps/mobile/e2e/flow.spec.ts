@@ -71,7 +71,7 @@ test('a camera with no face never produces readings', async ({ page }) => {
   await expect(page.getByTestId('screen-scan')).toBeVisible();
   // The fake camera streams a test pattern; the detector must report no face.
   await expect(page.getByTestId('quality-status')).toContainText(
-    /Looking for your face|Position your face/,
+    /Looking for your face|can’t see your face/,
     { timeout: 30_000 },
   );
   await page.waitForTimeout(4000);
