@@ -224,7 +224,7 @@ export default function Scan() {
       : camStatus === 'loading_detector'
         ? 'Starting face detection…'
         : previewOnly && camStatus === 'running'
-        ? 'Camera preview is running (face processing disabled).'
+          ? 'Camera preview is running (face processing disabled).'
         : phase === 'scanning' && live
           ? live.guidance
           : phase === 'scanning'
@@ -406,7 +406,13 @@ export default function Scan() {
             </View>
             {previewOnly ? (
               <TextButton label="Exit preview test" onPress={restart} />
-            ) : null}
+            ) : (
+              <TextButton
+                label="Test camera preview only (no measurements)"
+                onPress={testPreview}
+                testID="camera-preview-test"
+              />
+            )}
             {demoEnabled && !previewOnly ? (
               <TextButton
                 label="Show demo results (simulated)"
