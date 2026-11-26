@@ -45,7 +45,12 @@ export async function buildApp(
   app.decorate('tokens', new TokenService(db, config));
 
   await app.register(helmet);
-  await app.register(cors, { origin: config.corsOrigins.length ? config.corsOrigins : false });
+  await app.register(cors, {
+    origin: config.corsOrigins.length ? config.corsOrigins : false,
+    // @fastify/cors defaults to GET,HEAD,POST only; the API also uses PATCH/PUT/DELETE.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+  });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
 
   /** Resolve the authenticated, active user. Old tokens of deleted users stop working. */
@@ -74,29 +79,23 @@ export async function buildApp(
     }
     const e = err as { statusCode?: number; code?: string; message?: string };
     if (e.statusCode === 429) {
-      return reply
-        .status(429)
-        .send({
-          error: { code: 'rate_limited', message: 'Too many requests', request_id: req.id },
-        });
+      return reply.status(429).send({
+        error: { code: 'rate_limited', message: 'Too many requests', request_id: req.id },
+      });
     }
     if (e.statusCode && e.statusCode >= 400 && e.statusCode < 500) {
-      return reply
-        .status(e.statusCode)
-        .send({
-          error: {
-            code: 'malformed_request',
-            message: e.message ?? 'Bad request',
-            request_id: req.id,
-          },
-        });
+      return reply.status(e.statusCode).send({
+        error: {
+          code: 'malformed_request',
+          message: e.message ?? 'Bad request',
+          request_id: req.id,
+        },
+      });
     }
     req.log.error({ err }, 'unhandled error');
-    return reply
-      .status(500)
-      .send({
-        error: { code: 'internal', message: 'Unexpected server error', request_id: req.id },
-      });
+    return reply.status(500).send({
+      error: { code: 'internal', message: 'Unexpected server error', request_id: req.id },
+    });
   });
   app.setNotFoundHandler((req, reply) =>
     reply

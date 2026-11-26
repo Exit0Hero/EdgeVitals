@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "EdgeVitals",
+    "slug": "edgevitals",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.edgevitals.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "EdgeVitals uses the front camera during a scan to estimate heart rate, HRV and breathing from subtle colour changes in your face. Video is processed on your device and never stored or uploaded."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.edgevitals.app",
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      "expo-sharing"
+    ],
+    "scheme": "edgevitals",
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

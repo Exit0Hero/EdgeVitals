@@ -50,6 +50,7 @@ describe('dashboard and trends', () => {
     expect(d.streak).toBe(4);
     expect(d.today.morning.status).toBe('completed');
     expect(d.scores.recovery).toBeNull();
+    expect(d.score_usual).toEqual({ recovery: null, stress: null, energy: null });
     expect(
       d.last_assessment.metrics.find((m: { metric: string }) => m.metric === 'heart_rate').relative,
     ).toBe('no_baseline');
@@ -67,6 +68,7 @@ describe('dashboard and trends', () => {
     expect(d.streak).toBe(22);
     expect(d.scores.recovery.value).toBeGreaterThanOrEqual(0);
     expect(['Good', 'Fair', 'Low']).toContain(d.scores.recovery.label);
+    expect(typeof d.score_usual.recovery).toBe('number');
     expect(d.progress.hrv).not.toBeNull();
     expect(d.report).toMatchObject({ unlocked: false, daysToGo: 8 });
     expect(d.insight.body).toMatch(/not proof of cause/);
