@@ -88,7 +88,9 @@ export class ScanSession {
         this.currentUsableStart === null ||
         this.currentUsableEnd === null ||
         sample.t - this.currentUsableEnd > gapMs
-      ) this.currentUsableStart = sample.t;
+      ) {
+        this.currentUsableStart = sample.t;
+      }
       this.currentUsableEnd = sample.t;
       this.bestUsableMs = Math.max(this.bestUsableMs, sample.t - this.currentUsableStart);
     }
