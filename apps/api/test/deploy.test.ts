@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 import { loadConfig } from '../src/config';
 import { createPool } from '../src/db';
+import { migrate } from '../src/migrate';
+import { TEST_DB } from './globalSetup';
 import { setupApp, teardown } from './helpers';
 
 const env = {
@@ -35,6 +39,39 @@ describe('deployment probes and config', () => {
     } finally {
       await app.close();
       await db.end();
+    }
+  });
+
+  it('is not ready until every migration is applied, then becomes ready', async () => {
+    // A fresh, empty database: what a new Render Postgres looks like before
+    // the migration workflow runs.
+    const name = `ev_ready_${randomUUID().replaceAll('-', '')}`;
+    const admin = new pg.Client({ connectionString: TEST_DB });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${name}`);
+    const url = new URL(TEST_DB);
+    url.pathname = `/${name}`;
+    const config = loadConfig({ ...env, DATABASE_URL: url.toString(), NODE_ENV: 'test' });
+    const db = createPool(config.databaseUrl);
+    const app = await buildApp(config, db);
+    try {
+      const before = await app.inject({ method: 'GET', url: '/ready' });
+      expect(before.statusCode).toBe(503);
+      expect(before.json()).toMatchObject({
+        ok: false,
+        error: { code: 'migrations_pending', pending: expect.any(Number) },
+      });
+      expect(before.json().error.pending).toBeGreaterThan(0);
+
+      await migrate(config.databaseUrl);
+      const after = await app.inject({ method: 'GET', url: '/ready' });
+      expect(after.statusCode).toBe(200);
+      expect(after.json()).toEqual({ ok: true });
+    } finally {
+      await app.close();
+      await db.end();
+      await admin.query(`DROP DATABASE IF EXISTS ${name}`);
+      await admin.end();
     }
   });
 

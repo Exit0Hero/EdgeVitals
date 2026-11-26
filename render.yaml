@@ -1,0 +1,58 @@
+# Render Blueprint for the EdgeVitals STAGING API ($0: free plans only).
+# Create it in the Render Dashboard: New → Blueprint → this repository.
+# Step-by-step setup, the one-time migration and free-tier limits:
+# docs/render-staging.md. Validated by apps/api/test/render-blueprint.test.ts.
+#
+# Free-tier facts (render.com/docs/free, checked 2026-11-26):
+# - The free web service spins down after 15 minutes without traffic and takes
+#   about a minute to wake on the next request.
+# - Free Postgres expires 30 days after creation (14-day grace to upgrade, then
+#   it is deleted with its data), has 1 GB storage and no backups.
+# - Free web services have no pre-deploy command, shell or one-off jobs, so the
+#   migration runs from GitHub Actions instead (.github/workflows/migrate-staging.yml).
+
+databases:
+  - name: edgevitals-staging-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: '16'
+    databaseName: edgevitals
+    user: edgevitals
+    # Block all external connections. Open it temporarily only while the
+    # migration workflow runs (see docs/render-staging.md).
+    ipAllowList: []
+
+services:
+  - type: web
+    name: edgevitals-staging-api
+    plan: free
+    region: singapore
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    # 503 until the database is reachable AND every migration in this build is
+    # applied, so a deploy never goes live on an out-of-date schema.
+    healthCheckPath: /ready
+    # Deploy new commits on main only after CI passes.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: edgevitals-staging-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: DEMO_MODE_ENABLED
+        value: 'false'
+      # Migrations run once per schema change from GitHub Actions, not at startup.
+      - key: MIGRATE_ON_START
+        value: 'false'
+      # Shown to users on the consent screen; matches `region` above.
+      - key: HOSTING_REGION
+        value: Singapore
+      # Render's documented default port for web services, set explicitly
+      # because the image's own default is 4000.
+      - key: PORT
+        value: '10000'

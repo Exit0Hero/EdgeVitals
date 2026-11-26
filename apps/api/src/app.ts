@@ -6,6 +6,7 @@ import { TokenService } from './auth/tokens';
 import type { AppConfig } from './config';
 import type { Db } from './db';
 import { ApiError, unauthorized } from './errors';
+import { pendingMigrations } from './migrate';
 import { assessmentRoutes } from './routes/assessments';
 import { authRoutes } from './routes/auth';
 import { insightRoutes } from './routes/insights';
@@ -105,13 +106,24 @@ export async function buildApp(
 
   // Liveness: the process is up. Readiness: it can also reach the database.
   app.get('/health', async () => ({ ok: true }));
+  // Once the schema is confirmed current it stays current for this process
+  // (migrations only run before a release), so later probes only ping the DB.
+  let schemaCurrent = false;
   app.get('/ready', async (_req, reply) => {
+    let pending: string[] = [];
     try {
       await db.query('SELECT 1');
-      return { ok: true };
+      if (!schemaCurrent) pending = await pendingMigrations(db);
     } catch {
       return reply.status(503).send({ ok: false, error: { code: 'db_unavailable' } });
     }
+    if (pending.length) {
+      return reply
+        .status(503)
+        .send({ ok: false, error: { code: 'migrations_pending', pending: pending.length } });
+    }
+    schemaCurrent = true;
+    return { ok: true };
   });
   app.get('/api/v1/config', async () => ({
     hosting_region: config.hostingRegion,

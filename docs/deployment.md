@@ -1,5 +1,7 @@
 # Deployment
 
+Free Render staging setup (Blueprint, one-time migration, limits): [render-staging.md](render-staging.md).
+
 EdgeVitals ships as three deployables:
 
 | Piece         | Artifact                                          | Where it runs                                                            |
@@ -78,8 +80,9 @@ docker build -f apps/mobile/Dockerfile.web \
 
 ## 4. Running
 
-- **Probes:** `GET /health` is liveness (process up). `GET /ready` checks the database and
-  returns 503 when it is unreachable; use it for readiness and load-balancer health checks.
+- **Probes:** `GET /health` is liveness (process up). `GET /ready` returns 503 when the database is
+  unreachable (`db_unavailable`) or when migrations in this build are not applied yet
+  (`migrations_pending`); use it for readiness and load-balancer health checks.
   Both images declare a Docker `HEALTHCHECK`.
 - **Shutdown:** on `SIGTERM` the API stops accepting connections, finishes in-flight requests and
   exits within 10 seconds. Give the platform a termination grace period of at least 15 seconds.
