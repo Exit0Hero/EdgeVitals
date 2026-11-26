@@ -6,7 +6,19 @@ The iOS/Android scan (`apps/mobile/src/camera/CameraScanner.tsx`) uses VisionCam
 
 ## Build
 
-`eas build --profile preview --platform ios|android` (needs an Expo account; iOS needs an Apple Developer account and the device registered), or `npx expo run:ios --device` / `npx expo run:android` on a machine with Xcode / Android Studio. The app needs a reachable API (`EXPO_PUBLIC_API_URL`).
+**Cloud (chosen): EAS via GitHub Actions.**
+
+1. One-time setup:
+   - create an Expo account;
+   - create an access token under Account settings › Access tokens;
+   - add the token as the `EXPO_TOKEN` repository secret.
+2. The test app needs a reachable **HTTPS staging API**. Deploy one first (see `docs/deployment.md`). The workflow writes its URL into the chosen EAS profile.
+3. Run it from GitHub: Actions › **Build test app** › Run workflow. Pick the platform and profile, then paste the staging API URL. The first run creates the EAS project. After that, commit the `extra.eas.projectId` that `eas init` reports, so later runs reuse it.
+4. Install the build on a phone:
+   - **Android:** open the build's install link or QR code from expo.dev on the phone and allow installing the APK.
+   - **iOS:** this needs an Apple Developer account. Run `npx eas-cli device:create` and open the link on each iPhone to register it. Then run `npx eas-cli credentials` once from a computer to set up ad-hoc signing (the workflow runs non-interactively and can't create credentials). Install from the build's link on the registered iPhone.
+
+**Local alternative:** run `npx expo run:ios --device` or `npx expo run:android` on a machine with Xcode or Android Studio, with `EXPO_PUBLIC_API_URL` set.
 
 ## Record for each device
 
