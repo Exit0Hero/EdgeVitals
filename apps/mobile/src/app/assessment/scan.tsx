@@ -225,11 +225,11 @@ export default function Scan() {
         ? 'Starting face detection…'
         : previewOnly && camStatus === 'running'
           ? 'Camera preview is running (face processing disabled).'
-        : phase === 'scanning' && live
-          ? live.guidance
-          : phase === 'scanning'
-            ? 'Looking for your face…'
-            : '';
+          : phase === 'scanning' && live
+            ? live.guidance
+            : phase === 'scanning'
+              ? 'Looking for your face…'
+              : '';
   const headline =
     q === 'ready' ? 'Keep still' : q === 'motion_too_high' ? 'Hold still' : 'Position your face';
   const elapsed = live ? Math.floor(live.elapsedSec) : 0;
