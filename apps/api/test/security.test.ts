@@ -5,7 +5,7 @@ import { registerUser, setupApp, teardown, type Ctx } from './helpers';
 
 let ctx: Ctx;
 beforeAll(async () => {
-  ctx = await setupApp({ AUTH_RATE_LIMIT_PER_MIN: '10' });
+  ctx = await setupApp({ AUTH_RATE_LIMIT_PER_MIN: '10', CORS_ORIGINS: 'http://localhost:8081' });
 });
 afterAll(() => teardown(ctx));
 
@@ -49,6 +49,29 @@ describe('security controls', () => {
     const res = await ctx.app.inject({ url: '/health' });
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['strict-transport-security']).toBeDefined();
+  });
+
+  it('allows the web app origin to use every API method, and no other origin', async () => {
+    for (const method of ['PATCH', 'PUT', 'DELETE']) {
+      const res = await ctx.app.inject({
+        method: 'OPTIONS',
+        url: '/api/v1/me/profile',
+        headers: {
+          origin: 'http://localhost:8081',
+          'access-control-request-method': method,
+          'access-control-request-headers': 'authorization,content-type',
+        },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost:8081');
+      expect(String(res.headers['access-control-allow-methods'])).toContain(method);
+    }
+    const evil = await ctx.app.inject({
+      method: 'OPTIONS',
+      url: '/api/v1/me/profile',
+      headers: { origin: 'https://evil.example', 'access-control-request-method': 'PATCH' },
+    });
+    expect(evil.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('rate-limits login attempts', async () => {

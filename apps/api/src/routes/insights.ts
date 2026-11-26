@@ -72,6 +72,15 @@ export async function insightRoutes(app: FastifyInstance) {
     const last = real[real.length - 1];
     const recoveryTrend = computeTrend(records, 'recovery', '30d', now, tz);
     const insights = computeInsights(records, tz);
+    // "vs usual" for score cards: median of the previous 30 days' scores, excluding today.
+    const usual = (m: 'recovery' | 'stress' | 'energy') => {
+      if (!baseline.ready) return null;
+      const t = m === 'recovery' ? recoveryTrend : computeTrend(records, m, '30d', now, tz);
+      const vals = t.points
+        .filter((p) => p.date !== today && p.value !== null)
+        .map((p) => p.value!);
+      return vals.length >= 3 ? Math.round(median(vals)) : null;
+    };
     return {
       date: today,
       timezone: tz,
@@ -88,6 +97,11 @@ export async function insightRoutes(app: FastifyInstance) {
           : null,
       },
       scores,
+      score_usual: {
+        recovery: usual('recovery'),
+        stress: usual('stress'),
+        energy: usual('energy'),
+      },
       last_assessment: vitals(last, baseline),
       morning_vitals: vitals(day?.morning, baseline),
       progress: {
