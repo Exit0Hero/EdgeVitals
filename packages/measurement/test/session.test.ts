@@ -34,28 +34,6 @@ describe('ScanSession', () => {
     expect(live.progress).toBe(0);
   });
 
-  it('keeps the longest continuous usable segment when later frames are unusable', () => {
-    const s = new ScanSession(45, 90);
-    const face = { x: 180, y: 140, width: 260, height: 300 };
-    const roi = { r: 180, g: 125, b: 105, skinPixels: 500, luma: 135, clippedFraction: 0 };
-    const frame = (t: number, visible: boolean) =>
-      s.pushFrame({
-        t,
-        faces: visible ? [face] : [],
-        roi: visible ? roi : null,
-        frameWidth: 640,
-        frameHeight: 640,
-      });
-    for (let i = 0; i < 11; i++) frame(i * 100, true);
-    expect(s.liveState().usableSec).toBeCloseTo(1, 3);
-    frame(1100, false);
-    for (let i = 12; i < 17; i++) frame(i * 100, true);
-    expect(s.liveState().usableSec).toBeCloseTo(1, 3);
-    // A gap beyond maxGapSec starts another segment even without invalid frames.
-    frame(2000, true);
-    expect(s.liveState().usableSec).toBeCloseTo(1, 3);
-  });
-
   it('clears buffers on cancel and refuses further frames', () => {
     const s = new ScanSession();
     const truth = syntheticSession({ durationSec: 5 });

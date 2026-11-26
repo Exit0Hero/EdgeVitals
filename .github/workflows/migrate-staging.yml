@@ -1,0 +1,51 @@
+# One-time (per schema change) migration of the Render STAGING database.
+# Free Render web services have no pre-deploy command or shell, so migrations
+# run from here against the database's External URL. Steps and the temporary
+# IP allow-list change it needs: docs/render-staging.md.
+name: Migrate staging database
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type MIGRATE to apply pending migrations to the staging database
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: migrate-staging
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CONFIRM: ${{ inputs.confirm }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - name: Check confirmation and secret
+        run: |
+          if [ "$CONFIRM" != "MIGRATE" ]; then
+            echo "::error::Type MIGRATE in the confirm box to run."
+            exit 1
+          fi
+          if [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "::error::Add the STAGING_DATABASE_URL repository secret (Render database → Connect → External Database URL)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --workspace @edgevitals/api --include-workspace-root --ignore-scripts --no-audit --no-fund
+      - name: Apply pending migrations
+        working-directory: apps/api
+        run: |
+          # Render only accepts TLS for external connections.
+          case "$STAGING_DATABASE_URL" in
+            *sslmode=*) url="$STAGING_DATABASE_URL" ;;
+            *\?*) url="$STAGING_DATABASE_URL&sslmode=require" ;;
+            *) url="$STAGING_DATABASE_URL?sslmode=require" ;;
+          esac
+          DATABASE_URL="$url" npm run migrate
