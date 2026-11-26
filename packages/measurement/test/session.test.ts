@@ -38,13 +38,14 @@ describe('ScanSession', () => {
     const s = new ScanSession(45, 90);
     const face = { x: 180, y: 140, width: 260, height: 300 };
     const roi = { r: 180, g: 125, b: 105, skinPixels: 500, luma: 135, clippedFraction: 0 };
-    const frame = (t: number, visible: boolean) => s.pushFrame({
-      t,
-      faces: visible ? [face] : [],
-      roi: visible ? roi : null,
-      frameWidth: 640,
-      frameHeight: 640,
-    });
+    const frame = (t: number, visible: boolean) =>
+      s.pushFrame({
+        t,
+        faces: visible ? [face] : [],
+        roi: visible ? roi : null,
+        frameWidth: 640,
+        frameHeight: 640,
+      });
     for (let i = 0; i < 11; i++) frame(i * 100, true);
     expect(s.liveState().usableSec).toBeCloseTo(1, 3);
     frame(1100, false);
