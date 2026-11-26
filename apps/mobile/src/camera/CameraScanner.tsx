@@ -90,11 +90,18 @@ export function CameraScanner({
     } else if (permission.status === 'denied' || permission.status === 'restricted') {
       cb.current.onStatus('denied', permission.status);
     } else if (!hasDevice) {
-      cb.current.onStatus('unavailable', 'No front camera was found on this device.');
-    } else {
-      // The camera reports 'running' from onStarted once frames flow.
-      cb.current.onStatus('loading_detector');
+      // Device enumeration is asynchronous. A temporary null device does not
+      // mean camera permission was revoked or the camera was switched off.
+      const timeout = setTimeout(() => {
+        cb.current.onStatus(
+          'unavailable',
+          'Front camera not detected. Check the Android camera access toggle and try again.',
+        );
+      }, 4000);
+      return () => clearTimeout(timeout);
     }
+    // The Camera onStarted event is the authoritative running signal.
+    // Avoid resetting it to 'loading_detector' during unrelated rerenders.
   }, [active, permission.status, hasDevice]);
 
   // A new capture starts a new timeline.
@@ -127,6 +134,7 @@ export function CameraScanner({
 
   const frameOutput = useFrameOutput({
     pixelFormat: 'yuv',
+    dropFramesWhileBusy: true,
     // Small frames keep per-frame work low; the face only needs ~150 px.
     targetResolution: { width: 480, height: 640 },
     onFrame(frame: Frame) {
@@ -268,7 +276,9 @@ export function CameraScanner({
           mirrorMode="auto"
           resizeMode="cover"
           onStarted={() => cb.current.onStatus('running')}
-          onError={(e) => cb.current.onStatus('error', e.message)}
+          onError={(e) =>
+            cb.current.onStatus('error', `Camera initialization failed: ${e.message}`)
+          }
           onInterruptionStarted={() =>
             cb.current.onStatus(
               'error',
