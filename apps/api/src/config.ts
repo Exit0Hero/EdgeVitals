@@ -11,6 +11,8 @@ export interface AppConfig {
   refreshTokenTtlDays: number;
   /** Per-IP requests per minute on auth endpoints. */
   authRateLimitPerMin: number;
+  /** Apply pending migrations when the server starts (default true). */
+  migrateOnStart: boolean;
 }
 
 /** Read configuration from the environment and fail fast on unsafe values. */
@@ -24,20 +26,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('DEMO_MODE_ENABLED must be false in production');
   const hostingRegion = env.HOSTING_REGION?.trim() || null;
   if (isProduction && !hostingRegion) throw new Error('HOSTING_REGION must be set in production');
+  const corsOrigins = (env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (isProduction && corsOrigins.some((o) => o === '*' || !o.startsWith('https://')))
+    throw new Error('CORS_ORIGINS must list explicit https:// origins in production');
   return {
     databaseUrl: env.DATABASE_URL,
     jwtSecret,
     port: Number(env.PORT ?? 4000),
     host: env.HOST ?? '0.0.0.0',
-    corsOrigins: (env.CORS_ORIGINS ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    corsOrigins,
     demoModeEnabled,
     hostingRegion,
     isProduction,
     accessTokenTtlSec: 15 * 60,
     refreshTokenTtlDays: 30,
     authRateLimitPerMin: Number(env.AUTH_RATE_LIMIT_PER_MIN ?? 10),
+    migrateOnStart: env.MIGRATE_ON_START !== 'false',
   };
 }

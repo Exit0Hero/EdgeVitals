@@ -12,8 +12,8 @@ export const colors = {
   background: '#FFFFFF',
   text: '#111419',
   textSecondary: '#3F4650',
-  muted: '#6B7280',
-  subtle: '#9AA0A8',
+  muted: '#636A76', // ≥4.5:1 on white, surface, hero and primarySoft (WCAG AA)
+  subtle: '#767C85', // non-text only (≥3:1 on white)
   success: '#247A50',
   successSoft: '#E6F4EC',
   warning: '#A8561A',

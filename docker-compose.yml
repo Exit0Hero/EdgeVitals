@@ -1,0 +1,55 @@
+# Production-like local stack: Postgres, a one-off migration job, the API and
+# the web app. Values come from deploy.env (copy deploy.env.example; never
+# commit the real file). This is for staging and smoke tests; for production
+# use a managed Postgres and your platform's secret store (docs/deployment.md).
+name: edgevitals
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: edgevitals
+      POSTGRES_DB: edgevitals
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U edgevitals']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: edgevitals-api
+    command: ['node', 'dist/migrate.js']
+    environment:
+      DATABASE_URL: postgres://edgevitals:${POSTGRES_PASSWORD}@db:5432/edgevitals
+    depends_on:
+      db: { condition: service_healthy }
+    restart: 'no'
+
+  api:
+    image: edgevitals-api
+    env_file: deploy.env
+    environment:
+      DATABASE_URL: postgres://edgevitals:${POSTGRES_PASSWORD}@db:5432/edgevitals
+      MIGRATE_ON_START: 'false'
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    ports: ['4000:4000']
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/mobile/Dockerfile.web
+      args:
+        EXPO_PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL in deploy.env}
+    environment:
+      API_ORIGIN: ${PUBLIC_API_URL}
+    ports: ['8080:8080']
+    restart: unless-stopped
+
+volumes:
+  pgdata:

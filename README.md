@@ -22,3 +22,7 @@ cd apps/mobile && npm run web   # Expo dev server
 ```
 
 End-to-end tests: `apps/mobile/e2e/README.md`. Design differences from the wireframes: `docs/design-deviations.md`.
+
+## Deployment
+
+Docker images, environment variables, migrations, hosting headers and the launch checklist: `docs/deployment.md`.

@@ -137,6 +137,16 @@ describe('export and deletion', () => {
     expect(data.assessments[0].measurements).toHaveLength(5);
     expect(data.consents.length).toBe(2);
     expect(JSON.stringify(data)).not.toContain('password');
+    // Once expired, the stored copy is purged on the next export request.
+    await ctx.db.query(
+      "UPDATE export_jobs SET expires_at = now() - interval '1 minute' WHERE id = $1",
+      [e1.json().id],
+    );
+    await ctx.app.inject({ method: 'POST', url: '/api/v1/me/export', headers: u.auth });
+    const purged = await ctx.db.query('SELECT payload, status FROM export_jobs WHERE id = $1', [
+      e1.json().id,
+    ]);
+    expect(purged.rows[0]).toEqual({ payload: null, status: 'expired' });
     const other = await registerUser(ctx.app);
     expect(
       (
@@ -160,11 +170,21 @@ describe('export and deletion', () => {
       payload: {},
     });
     expect(noConfirm.statusCode).toBeGreaterThanOrEqual(400);
+    // A valid session alone is not enough: the password is re-checked.
+    const wrongPassword = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/v1/me/deletion-request',
+      headers: u.auth,
+      payload: { confirm: 'DELETE', password: 'not the password 1' },
+    });
+    expect(wrongPassword.statusCode).toBe(403);
+    expect(wrongPassword.json().error.code).toBe('password_incorrect');
+    expect((await ctx.app.inject({ url: '/api/v1/me', headers: u.auth })).statusCode).toBe(200);
     const del = await ctx.app.inject({
       method: 'POST',
       url: '/api/v1/me/deletion-request',
       headers: u.auth,
-      payload: { confirm: 'DELETE' },
+      payload: { confirm: 'DELETE', password: 'correct horse 42' },
     });
     expect(del.statusCode).toBe(202);
     expect(del.json().status).toBe('completed');

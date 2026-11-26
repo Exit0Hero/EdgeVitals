@@ -60,9 +60,3 @@ export async function migrate(
     await client.end();
   }
 }
-
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL must be set');
-  migrate(url, console.log).then((r) => console.log(r.length ? 'done' : 'up to date'));
-}
