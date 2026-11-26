@@ -74,29 +74,23 @@ export async function buildApp(
     }
     const e = err as { statusCode?: number; code?: string; message?: string };
     if (e.statusCode === 429) {
-      return reply
-        .status(429)
-        .send({
-          error: { code: 'rate_limited', message: 'Too many requests', request_id: req.id },
-        });
+      return reply.status(429).send({
+        error: { code: 'rate_limited', message: 'Too many requests', request_id: req.id },
+      });
     }
     if (e.statusCode && e.statusCode >= 400 && e.statusCode < 500) {
-      return reply
-        .status(e.statusCode)
-        .send({
-          error: {
-            code: 'malformed_request',
-            message: e.message ?? 'Bad request',
-            request_id: req.id,
-          },
-        });
+      return reply.status(e.statusCode).send({
+        error: {
+          code: 'malformed_request',
+          message: e.message ?? 'Bad request',
+          request_id: req.id,
+        },
+      });
     }
     req.log.error({ err }, 'unhandled error');
-    return reply
-      .status(500)
-      .send({
-        error: { code: 'internal', message: 'Unexpected server error', request_id: req.id },
-      });
+    return reply.status(500).send({
+      error: { code: 'internal', message: 'Unexpected server error', request_id: req.id },
+    });
   });
   app.setNotFoundHandler((req, reply) =>
     reply
