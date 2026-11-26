@@ -43,6 +43,7 @@ export default function Scan() {
   );
   const [diagnosticText, setDiagnosticText] = useState('');
   const lastDiagnosticUpdate = useRef(-Infinity);
+  const [cameraAttempt, setCameraAttempt] = useState(0);
   const previewOnly = diagnosticMode !== 'full';
   const finishing = useRef(false);
 
@@ -124,16 +125,23 @@ export default function Scan() {
       // to preview-only mode instead of unmounting the entire camera view.
       if ((s === 'error' || s === 'unavailable') && diagnosticMode !== 'preview') {
         setDiagnosticMode('preview');
-        setDiagnosticText(detail ?? 'Processing stopped. Camera preview remains available.');
+        setCamStatus('idle');
+        setCamDetail(undefined);
+        setDiagnosticText(
+          detail
+            ? `Measurement processor stopped: ${detail}`
+            : 'Measurement processor stopped. Preview mode restored.',
+        );
         session.current = new ScanSession();
         setLive(null);
         setPhase('camera');
+        setCameraAttempt((n) => n + 1);
         return;
       }
       setCamStatus(s);
       setCamDetail(detail);
       if (s === 'running') {
-        setPhase('scanning');
+        setPhase(previewOnly ? 'camera' : 'scanning');
         if (!previewOnly && a?.assessmentId)
           api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
       }
@@ -171,6 +179,8 @@ export default function Scan() {
     setLive(null);
     setPhase('camera');
     setCamStatus('idle');
+    setCamDetail(undefined);
+    setCameraAttempt((n) => n + 1);
     setDiagnosticMode(Platform.OS === 'android' ? 'preview' : 'full');
     setDiagnosticText('');
   };
@@ -181,6 +191,7 @@ export default function Scan() {
     setError(null);
     setLive(null);
     setDiagnosticMode(stage);
+    setCameraAttempt((n) => n + 1);
     lastDiagnosticUpdate.current = -Infinity;
     setDiagnosticText('');
     setCamDetail(undefined);
@@ -319,7 +330,7 @@ export default function Scan() {
               }}
             >
               <CameraScanner
-                key={diagnosticMode}
+                key={`${diagnosticMode}-${cameraAttempt}`}
                 active={phase === 'camera' || phase === 'scanning'}
                 enableProcessing={!previewOnly || diagnosticMode !== 'preview'}
                 processingMode={diagnosticMode}
@@ -462,7 +473,7 @@ export default function Scan() {
               onPress={() => testStage('face')}
               testID="camera-face-test"
             />
-            {previewOnly ? <TextButton label="Return to normal scan" onPress={restart} /> : null}
+            {previewOnly ? <TextButton label="Restart camera safely" onPress={restart} /> : null}
             {demoEnabled && !previewOnly ? (
               <TextButton
                 label="Show demo results (simulated)"
