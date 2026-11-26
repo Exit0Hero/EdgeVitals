@@ -49,6 +49,13 @@ test('onboarding leads to an empty, honest Today screen', async ({ page }) => {
 });
 
 test('a camera with no face never produces readings', async ({ page }) => {
+  // The static server applies the production Content-Security-Policy; the
+  // MediaPipe detector must load under it without any violation.
+  const cspViolations: string[] = [];
+  page.on('console', (m) => {
+    if (/Content Security Policy|Content-Security-Policy/i.test(m.text()))
+      cspViolations.push(m.text());
+  });
   await onboard(page);
   await page.getByTestId('run-morning').click();
   await expect(page.getByTestId('screen-checkin-morning')).toBeVisible();
@@ -63,8 +70,13 @@ test('a camera with no face never produces readings', async ({ page }) => {
   await page.getByTestId('start-scan').click();
   await expect(page.getByTestId('screen-scan')).toBeVisible();
   // The fake camera streams a test pattern; the detector must report no face.
-  await expect(page.getByTestId('quality-status')).toContainText(/face/i, { timeout: 30_000 });
+  await expect(page.getByTestId('quality-status')).toContainText(
+    /Looking for your face|Position your face/,
+    { timeout: 30_000 },
+  );
   await page.waitForTimeout(4000);
+  await expect(page.getByTestId('quality-status')).not.toContainText(/failed|error/i);
+  expect(cspViolations).toEqual([]);
   await shot(page, '08-scan-no-face');
   // No usable signal means no progress toward a result.
   expect(

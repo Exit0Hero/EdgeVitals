@@ -11,6 +11,8 @@ export interface AppConfig {
   refreshTokenTtlDays: number;
   /** Per-IP requests per minute on auth endpoints. */
   authRateLimitPerMin: number;
+  /** Apply pending migrations when the server starts (default true). */
+  migrateOnStart: boolean;
 }
 
 /** Read configuration from the environment and fail fast on unsafe values. */
@@ -39,5 +41,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     accessTokenTtlSec: 15 * 60,
     refreshTokenTtlDays: 30,
     authRateLimitPerMin: Number(env.AUTH_RATE_LIMIT_PER_MIN ?? 10),
+    migrateOnStart: env.MIGRATE_ON_START !== 'false',
   };
 }
