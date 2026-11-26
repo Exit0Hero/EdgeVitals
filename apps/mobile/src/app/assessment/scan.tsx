@@ -36,7 +36,11 @@ export default function Scan() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [error, setError] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
-  const [diagnosticMode, setDiagnosticMode] = useState<CameraProcessingMode>('full');
+  // On Android, open the previously verified safe preview first. Native frame processing
+  // is opt-in until physical-device testing proves it no longer shuts down the app.
+  const [diagnosticMode, setDiagnosticMode] = useState<CameraProcessingMode>(
+    Platform.OS === 'android' ? 'preview' : 'full',
+  );
   const [diagnosticText, setDiagnosticText] = useState('');
   const lastDiagnosticUpdate = useRef(-Infinity);
   const previewOnly = diagnosticMode !== 'full';
@@ -116,6 +120,16 @@ export default function Scan() {
 
   const onStatus = useCallback(
     (s: CameraStatus, detail?: string) => {
+      // If the processing pipeline reports a recoverable error, immediately return
+      // to preview-only mode instead of unmounting the entire camera view.
+      if ((s === 'error' || s === 'unavailable') && diagnosticMode !== 'preview') {
+        setDiagnosticMode('preview');
+        setDiagnosticText(detail ?? 'Processing stopped. Camera preview remains available.');
+        session.current = new ScanSession();
+        setLive(null);
+        setPhase('camera');
+        return;
+      }
       setCamStatus(s);
       setCamDetail(detail);
       if (s === 'running') {
@@ -126,7 +140,7 @@ export default function Scan() {
       if (s === 'requesting' && a?.assessmentId)
         api.setStatus(a.assessmentId, 'permission_pending').catch(() => undefined);
     },
-    [a, previewOnly],
+    [a, previewOnly, diagnosticMode],
   );
 
   // Refresh the live view 4x per second from real session state.
@@ -157,11 +171,11 @@ export default function Scan() {
     setLive(null);
     setPhase('camera');
     setCamStatus('idle');
-    setDiagnosticMode('full');
+    setDiagnosticMode(Platform.OS === 'android' ? 'preview' : 'full');
     setDiagnosticText('');
   };
 
-  const testStage = (stage: Exclude<CameraProcessingMode, 'full'>) => {
+  const testStage = (stage: CameraProcessingMode) => {
     session.current = new ScanSession();
     finishing.current = false;
     setError(null);
@@ -243,7 +257,7 @@ export default function Scan() {
         ? 'Starting face detection…'
         : previewOnly && camStatus === 'running'
           ? diagnosticMode === 'preview'
-            ? 'Camera preview is running (frame processing disabled).'
+            ? diagnosticText || 'Camera ready. Measurements have not started.'
             : diagnosticText || 'Waiting for camera frames…'
           : phase === 'scanning' && live
             ? live.guidance
@@ -305,6 +319,7 @@ export default function Scan() {
               }}
             >
               <CameraScanner
+                key={diagnosticMode}
                 active={phase === 'camera' || phase === 'scanning'}
                 enableProcessing={!previewOnly || diagnosticMode !== 'preview'}
                 processingMode={diagnosticMode}
@@ -425,6 +440,13 @@ export default function Scan() {
                 },
               )}
             </View>
+            {diagnosticMode === 'preview' ? (
+              <PrimaryButton
+                label="Start measurements (experimental)"
+                onPress={() => testStage('full')}
+                testID="start-measurements"
+              />
+            ) : null}
             <TextButton
               label="Test camera preview only (no measurements)"
               onPress={() => testStage('preview')}
@@ -464,7 +486,7 @@ function CameraBlocked({
   status: CameraStatus;
   detail?: string;
   onRetry: () => void;
-  onTestStage: (stage: Exclude<CameraProcessingMode, 'full'>) => void;
+  onTestStage: (stage: CameraProcessingMode) => void;
 }) {
   const denied = status === 'denied';
   return (
