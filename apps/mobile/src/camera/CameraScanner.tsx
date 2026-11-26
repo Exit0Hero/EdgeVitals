@@ -243,10 +243,7 @@ export function CameraScanner({
     },
   });
 
-  const outputs = useMemo(
-    () => (mode === 'preview' ? [] : [frameOutput]),
-    [mode, frameOutput],
-  );
+  const outputs = useMemo(() => (mode === 'preview' ? [] : [frameOutput]), [mode, frameOutput]);
   const ready = active && permission.hasPermission && !!device;
 
   return (
