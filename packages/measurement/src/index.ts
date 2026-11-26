@@ -7,3 +7,4 @@ export * from './pos';
 export * from './estimators';
 export * from './pipeline';
 export * from './session';
+export * from './yuv';
