@@ -23,6 +23,10 @@ export interface LiveScanState {
   metrics: Record<MetricId, LiveMetricState>;
   /** Interim heart rate once enough clean signal exists; null otherwise. */
   interimHeartRate: number | null;
+  /** Interim HRV estimate passing the full quality gates, if any. */
+  interimHrv: number | null;
+  /** Interim breathing estimate passing the full quality gates, if any. */
+  interimBreathingRate: number | null;
 }
 
 export interface FrameInput {
@@ -44,6 +48,8 @@ export class ScanSession {
   private startT: number | null = null;
   private lastInterimAt = 0;
   private interimHr: number | null = null;
+  private interimHrv: number | null = null;
+  private interimBreathing: number | null = null;
   private done = false;
 
   constructor(
@@ -108,13 +114,20 @@ export class ScanSession {
     ) {
       this.lastInterimAt = last.t;
       const res = analyzeSession(this.frames);
-      const hr = res.metrics.find((m) => m.metric === 'heart_rate');
-      this.interimHr = hr?.status === 'valid' ? hr.value : null;
+      const currentValue = (metric: MetricId) => {
+        const result = res.metrics.find((m) => m.metric === metric);
+        return result?.status === 'valid' ? result.value : null;
+      };
+      this.interimHr = currentValue('heart_rate');
+      this.interimHrv = currentValue('hrv');
+      this.interimBreathing = currentValue('breathing_rate');
     }
 
     const metrics = {} as Record<MetricId, LiveMetricState>;
     for (const m of SUPPORTED_METRICS) metrics[m] = usableSec > 0 ? 'measuring' : 'pending';
     if (this.interimHr !== null) metrics.heart_rate = 'available';
+    if (this.interimHrv !== null) metrics.hrv = 'available';
+    if (this.interimBreathing !== null) metrics.breathing_rate = 'available';
     metrics.spo2 = 'unavailable';
     metrics.blood_pressure = 'unavailable';
 
@@ -126,6 +139,8 @@ export class ScanSession {
       progress: Math.min(1, usableSec / this.targetUsableSec),
       metrics,
       interimHeartRate: this.interimHr,
+      interimHrv: this.interimHrv,
+      interimBreathingRate: this.interimBreathing,
     };
   }
 
@@ -159,5 +174,7 @@ export class ScanSession {
     this.frames = [];
     this.done = true;
     this.interimHr = null;
+    this.interimHrv = null;
+    this.interimBreathing = null;
   }
 }

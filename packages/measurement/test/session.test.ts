@@ -8,17 +8,23 @@ describe('ScanSession', () => {
     const s = new ScanSession(45, 90);
     let finished = false;
     let sawInterim = false;
+    let sawHrv = false;
+    let sawBreathing = false;
     for (const f of truth.frames) {
       s.pushFrame({ t: f.t, faces: [f.face!], roi: f.roi, frameWidth: 640, frameHeight: 640 });
       const live = s.liveState();
       expect(live.metrics.spo2).toBe('unavailable');
       if (live.interimHeartRate !== null) sawInterim = true;
+      if (live.interimHrv !== null) sawHrv = true;
+      if (live.interimBreathingRate !== null) sawBreathing = true;
       if (s.shouldFinish()) {
         finished = true;
         break;
       }
     }
     expect(sawInterim).toBe(true);
+    expect(sawHrv).toBe(true);
+    expect(sawBreathing).toBe(true);
     expect(finished).toBe(true);
     const res = s.finish();
     expect(res.outcome).toBe('completed');

@@ -278,6 +278,7 @@ export default function Scan() {
   const headline =
     q === 'ready' ? 'Keep still' : q === 'motion_too_high' ? 'Hold still' : 'Position your face';
   const elapsed = live ? Math.floor(live.elapsedSec) : 0;
+  const framesReceived = session.current?.frameCount ?? 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.scanBackground }} testID="screen-scan">
@@ -369,7 +370,7 @@ export default function Scan() {
             >
               <T variant="heading" style={{ fontSize: 17 }}>
                 {previewOnly
-                  ? 'Camera preview test — no measurements'
+                  ? 'Camera preview — measurement paused'
                   : phase === 'submitting'
                     ? 'Analysing…'
                     : 'Measuring 3 of 5 vital signs'}
@@ -412,10 +413,18 @@ export default function Scan() {
                   const st =
                     live?.metrics[m] ??
                     (m === 'spo2' || m === 'blood_pressure' ? 'unavailable' : 'pending');
+                  const interim =
+                    m === 'heart_rate'
+                      ? live?.interimHeartRate
+                      : m === 'hrv'
+                        ? live?.interimHrv
+                        : m === 'breathing_rate'
+                          ? live?.interimBreathingRate
+                          : null;
                   const value =
-                    m === 'heart_rate' && live?.interimHeartRate
-                      ? `${live.interimHeartRate} bpm`
-                      : null;
+                    interim == null
+                      ? null
+                      : `${interim} ${m === 'heart_rate' ? 'bpm' : m === 'hrv' ? 'ms' : 'breaths/min'}`;
                   return (
                     <View
                       key={m}
@@ -441,7 +450,9 @@ export default function Scan() {
                       >
                         {value ??
                           (st === 'unavailable'
-                            ? 'not available'
+                            ? m === 'blood_pressure' || m === 'spo2'
+                              ? 'Not supported yet'
+                              : 'No reliable reading'
                             : st === 'measuring'
                               ? 'measuring…'
                               : 'waiting…')}
@@ -451,6 +462,13 @@ export default function Scan() {
                 },
               )}
             </View>
+            {!previewOnly && phase === 'scanning' ? (
+              <T variant="small" color={colors.muted}>
+                {framesReceived === 0
+                  ? 'Waiting for processed frames. No measurements received yet.'
+                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (45 seconds needed)`}
+              </T>
+            ) : null}
             {diagnosticMode === 'preview' ? (
               <PrimaryButton
                 label="Start measurements (experimental)"
