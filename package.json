@@ -1,0 +1,25 @@
+{
+  "name": "edgevitals",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EdgeVitals wellness check-in platform: mobile app, API and on-device measurement core",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.10.1",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.2"
+  }
+}
