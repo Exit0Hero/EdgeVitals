@@ -46,6 +46,15 @@ export function describeScan(r: SessionResult): string[] {
       `Beats accepted: ${g.beatAcceptedFraction === null ? '—' : `${Math.round(g.beatAcceptedFraction * 100)}%`} (needs ≥ 70%) · beat HR ${g.beatMeanHrBpm ?? '—'} bpm`,
     );
   }
+  const s = d.signal;
+  if (s) {
+    lines.push(
+      `Green only: peak ${s.greenPeakBpm ?? '—'} bpm · SNR ${s.greenSnrDb ?? '—'} dB · pulse-band size ${s.bandAmplitudePct}% (a real pulse is ~0.1-0.5%)`,
+    );
+    lines.push(
+      `Biggest frame-to-frame brightness jump: ${s.maxStepPct}% · frame gaps ${s.intervalP10Ms}-${s.intervalP90Ms} ms`,
+    );
+  }
   for (const m of r.metrics) {
     if (m.metric === 'spo2' || m.metric === 'blood_pressure') continue;
     lines.push(
@@ -58,9 +67,12 @@ export function describeScan(r: SessionResult): string[] {
 /** Collapsible "Scan details" card, used to troubleshoot readings on real phones. */
 export function ScanDetails({
   result,
+  trace = null,
   initiallyOpen = false,
 }: {
   result: SessionResult;
+  /** Per-frame mean skin colour (three numbers per frame, no images), shared only on request. */
+  trace?: string | null;
   /** Open by default after a failed scan so the reason is visible without a tap. */
   initiallyOpen?: boolean;
 }) {
@@ -93,6 +105,24 @@ export function ScanDetails({
               }).catch(() => undefined);
             }}
           />
+          {trace ? (
+            <>
+              <TextButton
+                label="Share signal trace"
+                align="flex-start"
+                onPress={() => {
+                  Share.share({
+                    message: `EdgeVitals signal trace (${Platform.OS} ${String(Platform.Version)})\n${trace}`,
+                  }).catch(() => undefined);
+                }}
+                testID="scan-trace-share"
+              />
+              <T variant="small" color={colors.muted}>
+                The signal trace is the average skin colour of each camera frame. It contains no
+                images, and it is only shared if you tap the button.
+              </T>
+            </>
+          ) : null}
         </View>
       ) : null}
     </Card>

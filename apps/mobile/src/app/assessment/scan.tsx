@@ -93,6 +93,8 @@ export default function Scan() {
       if (!a?.assessmentId || !session.current || finishing.current) return;
       finishing.current = true;
       setPhase('submitting');
+      // Taken before finish(), which clears the per-frame buffer.
+      const trace = cancelled ? null : session.current.exportTrace();
       const pipelineResult = cancelled ? session.current.cancel() : session.current.finish();
       try {
         // SpO2 and BP only ever come from a licensed SDK; without one they stay unavailable.
@@ -103,7 +105,7 @@ export default function Scan() {
           router.dismissTo('/today');
           return;
         }
-        rememberScan(a.assessmentId, result);
+        rememberScan(a.assessmentId, result, trace);
         await api.submitMeasurements(a.assessmentId, toSubmission(result));
         setAssessment((d) => (d ? { ...d, result } : d));
         router.replace({ pathname: '/assessment/results', params: { id: a.assessmentId } });

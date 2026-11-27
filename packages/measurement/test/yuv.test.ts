@@ -4,6 +4,7 @@ import {
   extractRoiYuv,
   inferPixelStride,
   orientationToRotation,
+  holdRoiBox,
   smoothFaceBox,
   uprightToBuffer,
   type Rotation,
@@ -147,5 +148,16 @@ describe('YUV ROI extraction', () => {
     const moved = smoothFaceBox(box, { x: 180, y: 100, width: 200, height: 200 });
     expect(moved.x).toBe(180);
     expect(smoothFaceBox(null, box)).toEqual(box);
+  });
+
+  it('holds the sampling box still until the face really moves', () => {
+    const held = holdRoiBox(null, { x: 100.4, y: 99.6, width: 200.2, height: 240.7 });
+    expect(held).toEqual({ x: 100, y: 100, width: 200, height: 241 });
+    // Sub-pixel and few-pixel drift keeps exactly the same pixels.
+    expect(holdRoiBox(held, { x: 103.3, y: 97.2, width: 204, height: 245 })).toBe(held);
+    // A move of more than 8% of the face width replaces it.
+    expect(holdRoiBox(held, { x: 120, y: 100, width: 200, height: 241 }).x).toBe(120);
+    // So does a size change of more than 8%.
+    expect(holdRoiBox(held, { x: 90, y: 90, width: 220, height: 264 }).width).toBe(220);
   });
 });

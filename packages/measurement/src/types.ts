@@ -126,6 +126,8 @@ export interface SignalDiagnostics {
   capture?: CaptureDiagnostics;
   /** Heart-rate gate inputs, present when a spectral peak was found. */
   hrGate?: HrGateDiagnostics;
+  /** Raw-signal statistics of the analysed segment, for troubleshooting. */
+  signal?: SignalStatsDiagnostics;
   /** Present only when experimental SpO2 was requested (ADR 0008). */
   experimentalSpo2?: {
     ratio: number | null;
@@ -133,6 +135,20 @@ export interface SignalDiagnostics {
     iqr: number | null;
     failure: string | null;
   };
+}
+
+export interface SignalStatsDiagnostics {
+  /** Spectral peak of the green channel alone (no POS), bpm. */
+  greenPeakBpm: number | null;
+  /** SNR of that green-only peak, dB (same definition as hrSnrDb). */
+  greenSnrDb: number | null;
+  /** Std of the band-passed (0.7-3 Hz) green trace as % of its mean. A real pulse is ~0.1-0.5%. */
+  bandAmplitudePct: number;
+  /** Largest frame-to-frame change of mean green, % (auto-exposure steps show up here). */
+  maxStepPct: number;
+  /** 10th and 90th percentile of the interval between analysed frames, ms. */
+  intervalP10Ms: number;
+  intervalP90Ms: number;
 }
 
 export interface CaptureDiagnostics {

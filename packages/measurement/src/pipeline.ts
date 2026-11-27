@@ -1,5 +1,5 @@
 import { ALGORITHM_NAME, CONFIG_VERSION, PIPELINE_CONFIG, PIPELINE_VERSION } from './config';
-import { mean, median, resampleUniform } from './dsp';
+import { bandpass, mean, median, resampleUniform, std } from './dsp';
 import { estimateBreathing, estimateHeartRate, estimateHrv } from './estimators';
 import { pos } from './pos';
 import { EXPERIMENTAL_SPO2, estimateExperimentalSpo2 } from './experimentalSpo2';
@@ -12,6 +12,7 @@ import type {
   SessionOutcome,
   SessionResult,
   SignalDiagnostics,
+  SignalStatsDiagnostics,
   UnavailableReason,
 } from './types';
 import { METRIC_UNITS } from './types';
@@ -200,6 +201,7 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
       seg.map((f) => f.roi!.b),
       fs,
     );
+    diagnostics.signal = signalStats(seg, g, fs);
     const h = pos(r, g, b, Math.round(cfg.posWindowSec * fs));
     const hr = estimateHeartRate(h, fs);
     diagnostics.hrSnrDb = hr ? round(hr.snrDb, 2) : null;
@@ -309,6 +311,32 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
   const outcome: SessionOutcome =
     validCount === SUPPORTED_METRICS.length ? 'completed' : validCount > 0 ? 'partial' : 'failed';
   return { ...base, outcome, metrics, diagnostics };
+}
+
+/** Raw-signal statistics that separate "no pulse in the colour" from "pulse buried in noise". */
+function signalStats(seg: FrameSample[], g: number[], fs: number): SignalStatsDiagnostics {
+  const gm = mean(g);
+  const green = estimateHeartRate(g, fs);
+  const band = bandpass(g, cfg.hrBandHz[0], cfg.hrBandHz[1], fs);
+  let maxStep = 0;
+  const dts: number[] = [];
+  for (let i = 1; i < seg.length; i++) {
+    const a = seg[i - 1]!.roi!.g;
+    const b = seg[i]!.roi!.g;
+    if (a > 0) maxStep = Math.max(maxStep, Math.abs(b - a) / a);
+    dts.push(seg[i]!.t - seg[i - 1]!.t);
+  }
+  dts.sort((x, y) => x - y);
+  const pct = (q: number) =>
+    dts.length ? dts[Math.min(dts.length - 1, Math.floor(q * dts.length))]! : 0;
+  return {
+    greenPeakBpm: green ? round(green.bpm, 1) : null,
+    greenSnrDb: green ? round(green.snrDb, 2) : null,
+    bandAmplitudePct: gm > 0 ? round((100 * std(band)) / gm, 3) : 0,
+    maxStepPct: round(100 * maxStep, 2),
+    intervalP10Ms: round(pct(0.1), 1),
+    intervalP90Ms: round(pct(0.9), 1),
+  };
 }
 
 function hrQualityFor(snrDb: number): number {
