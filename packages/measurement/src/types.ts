@@ -86,8 +86,10 @@ export interface MetricProvenance {
   /**
    * camera_rppg: EdgeVitals' own pipeline. licensed_sdk: a licensed
    * third-party SDK (ADR 0007); only ever used for SpO2 and blood pressure.
+   * camera_experimental: an opt-in, unvalidated research estimator from a
+   * published method (ADR 0008); currently SpO2 only.
    */
-  method: 'camera_rppg' | 'licensed_sdk';
+  method: 'camera_rppg' | 'licensed_sdk' | 'camera_experimental';
   algorithm: string;
   version: string;
   source: 'measured' | 'simulated';
@@ -124,6 +126,13 @@ export interface SignalDiagnostics {
   capture?: CaptureDiagnostics;
   /** Heart-rate gate inputs, present when a spectral peak was found. */
   hrGate?: HrGateDiagnostics;
+  /** Present only when experimental SpO2 was requested (ADR 0008). */
+  experimentalSpo2?: {
+    ratio: number | null;
+    acceptedFraction: number;
+    iqr: number | null;
+    failure: string | null;
+  };
 }
 
 export interface CaptureDiagnostics {

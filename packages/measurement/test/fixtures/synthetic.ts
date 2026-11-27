@@ -40,6 +40,8 @@ export interface SyntheticOptions {
   seed?: number;
   /** Replace pulse with pure noise. */
   noPulse?: boolean;
+  /** Relative pulse strength per channel [r, g, b]. */
+  pulseVec?: [number, number, number];
 }
 
 export interface SyntheticTruth {
@@ -91,7 +93,7 @@ export function syntheticSession(o: SyntheticOptions = {}): SyntheticTruth {
   };
 
   const base = [175, 125, 105];
-  const pulseVec = [0.33, 0.77, 0.53];
+  const pulseVec = o.pulseVec ?? [0.33, 0.77, 0.53];
   const frames: FrameSample[] = [];
   const n = Math.floor(dur * fps);
   for (let i = 0; i < n; i++) {

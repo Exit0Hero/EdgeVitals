@@ -47,6 +47,26 @@ export const profileSchema = z.object({
   weight_kg: z.number().min(30).max(300),
 });
 export type Profile = z.infer<typeof profileSchema>;
+
+/** A blood-pressure reading the user copied from their own cuff. */
+export const cuffReadingSchema = z
+  .object({
+    systolic: z.number().int().min(60).max(260),
+    diastolic: z.number().int().min(30).max(160),
+    pulse_bpm: z.number().int().min(30).max(220).nullable().optional(),
+    measured_at: z.iso.datetime({ offset: true }),
+  })
+  .superRefine((r, ctx) => {
+    if (r.diastolic >= r.systolic)
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Diastolic must be lower than systolic',
+        path: ['diastolic'],
+      });
+    if (Date.parse(r.measured_at) > Date.now() + 5 * 60_000)
+      ctx.addIssue({ code: 'custom', message: 'Time is in the future', path: ['measured_at'] });
+  });
+export type CuffReadingInput = z.infer<typeof cuffReadingSchema>;
 export const profilePatchSchema = profileSchema.partial();
 
 export const CONSENT_TYPES = [
@@ -167,7 +187,7 @@ export const measurementSchema = z
     quality_score: z.number().min(0).max(1).nullable(),
     quality_flags: z.array(z.string().max(40)).max(20),
     reason: z.string().max(40).nullable(),
-    method: z.enum(['camera_rppg', 'demo_fixture', 'licensed_sdk']),
+    method: z.enum(['camera_rppg', 'demo_fixture', 'licensed_sdk', 'camera_experimental']),
     algorithm_name: z.string().min(1).max(60),
     algorithm_version: z.string().regex(/^\d+\.\d+\.\d+$/),
     config_version: z.string().min(1).max(60),
@@ -214,10 +234,19 @@ export const measurementSchema = z
     // SpO2 and blood pressure have no EdgeVitals camera method (ADR 0004). They
     // are accepted only from a licensed SDK, which may report nothing else (ADR 0007).
     const sdkMetric = m.metric === 'spo2' || m.metric === 'blood_pressure';
-    if (sdkMetric && m.status === 'valid' && m.method !== 'licensed_sdk')
+    // Experimental camera SpO2 (ADR 0008) is the only opt-in research estimator.
+    const allowedValid =
+      m.method === 'licensed_sdk' || (m.metric === 'spo2' && m.method === 'camera_experimental');
+    if (sdkMetric && m.status === 'valid' && !allowedValid)
       ctx.addIssue({
         code: 'custom',
-        message: `${m.metric} is only accepted from a licensed SDK`,
+        message: `${m.metric} is only accepted from a licensed SDK or the experimental SpO2 estimator`,
+        path: ['method'],
+      });
+    if (m.method === 'camera_experimental' && m.metric !== 'spo2')
+      ctx.addIssue({
+        code: 'custom',
+        message: 'experimental camera estimates are only accepted for spo2',
         path: ['method'],
       });
     if (!sdkMetric && m.method === 'licensed_sdk')

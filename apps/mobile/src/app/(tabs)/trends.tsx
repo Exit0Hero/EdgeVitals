@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -257,21 +257,34 @@ export default function Trends() {
                   borderBottomColor: colors.border,
                 }}
               >
-                <T variant="body" style={{ flex: 1 }}>
-                  Blood pressure
-                </T>
+                <View style={{ flex: 1 }}>
+                  <T variant="body">Blood pressure</T>
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => router.push('/blood-pressure')}
+                    testID="log-bp"
+                    style={{ minHeight: 32, justifyContent: 'center' }}
+                  >
+                    <T variant="small" color={colors.primary}>
+                      Log a cuff reading
+                    </T>
+                  </Pressable>
+                </View>
                 {bp?.value != null && bp.value_secondary != null ? (
                   <>
                     <T variant="label" style={{ textAlign: 'right' }}>
                       {`${bp.value}/${bp.value_secondary} mmHg`}
                     </T>
                     <View style={{ width: 90, alignItems: 'flex-end' }}>
-                      <StatusPill label="Estimate" tone="muted" />
+                      <StatusPill
+                        label={bp.source === 'cuff' ? 'Your cuff' : 'Estimate'}
+                        tone="muted"
+                      />
                     </View>
                   </>
                 ) : (
                   <T variant="small" color={colors.muted}>
-                    Not available from the camera
+                    No readings yet
                   </T>
                 )}
               </View>

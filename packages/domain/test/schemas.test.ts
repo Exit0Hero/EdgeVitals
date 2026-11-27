@@ -64,6 +64,24 @@ describe('measurement schema', () => {
     expect(measurementSchema.safeParse(bp).success).toBe(false);
     expect(measurementSchema.safeParse({ ...bp, value_secondary: 125 }).success).toBe(false);
   });
+  it('accepts experimental camera estimates for SpO2 only', () => {
+    const exp = { method: 'camera_experimental', algorithm_name: 'bal2015-ror-red-blue' };
+    expect(
+      measurementSchema.safeParse({ ...base, metric: 'spo2', unit: '%', value: 97, ...exp })
+        .success,
+    ).toBe(true);
+    expect(
+      measurementSchema.safeParse({
+        ...base,
+        metric: 'blood_pressure',
+        unit: 'mmHg',
+        value: 120,
+        value_secondary: 80,
+        ...exp,
+      }).success,
+    ).toBe(false);
+    expect(measurementSchema.safeParse({ ...base, ...exp }).success).toBe(false);
+  });
   it('never lets a licensed SDK report pipeline metrics', () => {
     expect(measurementSchema.safeParse({ ...base, method: 'licensed_sdk' }).success).toBe(false);
   });

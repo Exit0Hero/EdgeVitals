@@ -12,6 +12,7 @@ import { deviceTimeZone, uuid } from '../../lib/id';
 import { toSubmission } from '../../lib/measurements';
 import { demoMeasurements } from '../../lib/demo';
 import { withSdkVitals } from '../../vitals-sdk';
+import { getExperimentalSpo2 } from '../../lib/experimental';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
 
@@ -53,8 +54,27 @@ export default function Scan() {
       .catch(() => undefined);
   }, []);
 
+  // Opt-in experimental SpO2 (ADR 0008), read once when the screen opens.
+  const experimentalSpo2 = useRef(false);
+  const makeSession = useCallback(
+    () => new ScanSession(undefined, undefined, { spo2: experimentalSpo2.current }),
+    [],
+  );
   useEffect(() => {
-    session.current = new ScanSession();
+    let alive = true;
+    getExperimentalSpo2().then((on) => {
+      if (!alive || on === experimentalSpo2.current) return;
+      experimentalSpo2.current = on;
+      // Only swap a session that has not started capturing yet.
+      if (session.current && session.current.frameCount === 0) session.current = makeSession();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [makeSession]);
+
+  useEffect(() => {
+    session.current = makeSession();
     return () => {
       // Leaving the screen discards any buffered statistics.
       if (session.current && session.current.frameCount >= 0) {
@@ -133,7 +153,7 @@ export default function Scan() {
             ? `Measurement processor stopped: ${detail}`
             : 'Measurement processor stopped. Preview mode restored.',
         );
-        session.current = new ScanSession();
+        session.current = makeSession();
         setLive(null);
         setPhase('camera');
         setCameraAttempt((n) => n + 1);
@@ -164,7 +184,7 @@ export default function Scan() {
     const sub = AppState.addEventListener('change', (st) => {
       if (st !== 'active' && phase === 'scanning' && session.current) {
         session.current.cancel();
-        session.current = new ScanSession();
+        session.current = makeSession();
         setLive(null);
         setPhase('interrupted');
         setError('The scan was interrupted because the app left the screen. Nothing was saved.');
@@ -174,7 +194,7 @@ export default function Scan() {
   }, [phase]);
 
   const restart = () => {
-    session.current = new ScanSession();
+    session.current = makeSession();
     finishing.current = false;
     setError(null);
     setLive(null);
@@ -187,7 +207,7 @@ export default function Scan() {
   };
 
   const testStage = (stage: CameraProcessingMode) => {
-    session.current = new ScanSession();
+    session.current = makeSession();
     finishing.current = false;
     setError(null);
     setLive(null);
