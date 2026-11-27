@@ -67,6 +67,7 @@ export default function Results() {
     relative: a.demo ? undefined : (relative.get(m.metric) ?? 'no_baseline'),
   }));
   const validCount = a.measurements.filter((m) => m.status === 'valid').length;
+  const sdkVitals = a.measurements.some((m) => m.method === 'licensed_sdk' && m.status === 'valid');
   const failed = a.status === 'failed';
   const isToday = dash.today[a.kind]?.assessment_id === a.id;
   const scores = isToday && !a.demo ? dash.scores : null;
@@ -217,9 +218,11 @@ export default function Results() {
       <VitalRows vitals={vitals} />
       <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
         Wellness information only, not for diagnosis. Heart rate, HRV and breathing are camera
-        estimates that have not been clinically validated. SpO₂ and blood pressure can't be measured
-        by the camera. If readings stay higher than usual, consider talking to a health
-        professional.
+        estimates that have not been clinically validated.{' '}
+        {sdkVitals
+          ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
+          : 'SpO₂ and blood pressure are not available from the camera on this device.'}{' '}
+        If readings stay higher than usual, consider talking to a health professional.
       </T>
     </Screen>
   );

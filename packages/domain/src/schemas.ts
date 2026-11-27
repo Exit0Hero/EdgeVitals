@@ -167,7 +167,7 @@ export const measurementSchema = z
     quality_score: z.number().min(0).max(1).nullable(),
     quality_flags: z.array(z.string().max(40)).max(20),
     reason: z.string().max(40).nullable(),
-    method: z.enum(['camera_rppg', 'demo_fixture']),
+    method: z.enum(['camera_rppg', 'demo_fixture', 'licensed_sdk']),
     algorithm_name: z.string().min(1).max(60),
     algorithm_version: z.string().regex(/^\d+\.\d+\.\d+$/),
     config_version: z.string().min(1).max(60),
@@ -211,13 +211,30 @@ export const measurementSchema = z
         message: 'demo fixtures cannot be valid measurements',
         path: ['status'],
       });
-    // SpO2 and blood pressure have no supported camera method (ADR 0004).
-    if ((m.metric === 'spo2' || m.metric === 'blood_pressure') && m.status === 'valid')
+    // SpO2 and blood pressure have no EdgeVitals camera method (ADR 0004). They
+    // are accepted only from a licensed SDK, which may report nothing else (ADR 0007).
+    const sdkMetric = m.metric === 'spo2' || m.metric === 'blood_pressure';
+    if (sdkMetric && m.status === 'valid' && m.method !== 'licensed_sdk')
       ctx.addIssue({
         code: 'custom',
-        message: `${m.metric} is not a supported measurement`,
-        path: ['status'],
+        message: `${m.metric} is only accepted from a licensed SDK`,
+        path: ['method'],
       });
+    if (!sdkMetric && m.method === 'licensed_sdk')
+      ctx.addIssue({
+        code: 'custom',
+        message: 'licensed SDKs may only report spo2 and blood_pressure',
+        path: ['method'],
+      });
+    if (m.metric === 'blood_pressure' && m.status === 'valid') {
+      const dia = m.value_secondary;
+      if (dia === null || dia === undefined || m.value === null || dia >= m.value)
+        ctx.addIssue({
+          code: 'custom',
+          message: 'blood pressure needs a diastolic value below systolic',
+          path: ['value_secondary'],
+        });
+    }
   });
 export type MeasurementInput = z.infer<typeof measurementSchema>;
 

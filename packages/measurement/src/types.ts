@@ -83,11 +83,18 @@ export type UnavailableReason =
   | 'cancelled';
 
 export interface MetricProvenance {
-  method: 'camera_rppg';
+  /**
+   * camera_rppg: EdgeVitals' own pipeline. licensed_sdk: a licensed
+   * third-party SDK (ADR 0007); only ever used for SpO2 and blood pressure.
+   */
+  method: 'camera_rppg' | 'licensed_sdk';
   algorithm: string;
   version: string;
   source: 'measured' | 'simulated';
-  /** No camera metric has passed a validation study yet. */
+  /**
+   * No camera metric has passed an EdgeVitals validation study. Vendor
+   * accuracy claims do not change this: we have not verified them.
+   */
   validation: 'unvalidated';
 }
 

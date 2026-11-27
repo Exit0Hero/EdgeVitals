@@ -213,6 +213,8 @@ export interface VitalsSummary {
     metric: MeasurementOut['metric'];
     status: string;
     value: number | null;
+    value_secondary?: number | null;
+    method?: string | null;
     relative: RelativeStatus;
   }[];
 }
@@ -241,7 +243,15 @@ export type Trends = TrendSeries & {
   insight: Insight | null;
   summaries: {
     resting_heart_rate: { value: number | null; relative: RelativeStatus; sample_count: number };
-    blood_pressure: { value: null; relative: 'unavailable'; reason: string };
+    /** Latest licensed-SDK reading in the period (ADR 0007), else nulls. */
+    blood_pressure: {
+      value: number | null;
+      value_secondary: number | null;
+      measured_at: string | null;
+      source: string | null;
+      relative: 'unavailable';
+      reason: string | null;
+    };
   };
 };
 

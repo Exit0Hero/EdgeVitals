@@ -38,19 +38,34 @@ describe('measurement schema', () => {
     expect(measurementSchema.safeParse({ ...base, unit: 'ms' }).success).toBe(false);
     expect(measurementSchema.safeParse({ ...base, value: 400 }).success).toBe(false);
   });
-  it('never accepts SpO2 or blood pressure as valid', () => {
-    expect(
-      measurementSchema.safeParse({ ...base, metric: 'spo2', unit: '%', value: 98 }).success,
-    ).toBe(false);
-    expect(
-      measurementSchema.safeParse({
-        ...base,
-        metric: 'blood_pressure',
-        unit: 'mmHg',
-        value: 120,
-        value_secondary: 80,
-      }).success,
-    ).toBe(false);
+  it('accepts SpO2 and blood pressure as valid only from a licensed SDK', () => {
+    const spo2 = { ...base, metric: 'spo2', unit: '%', value: 98 };
+    const bp = {
+      ...base,
+      metric: 'blood_pressure',
+      unit: 'mmHg',
+      value: 120,
+      value_secondary: 80,
+    };
+    expect(measurementSchema.safeParse(spo2).success).toBe(false);
+    expect(measurementSchema.safeParse(bp).success).toBe(false);
+    const sdk = { method: 'licensed_sdk', algorithm_name: 'sdk-binah' };
+    expect(measurementSchema.safeParse({ ...spo2, ...sdk }).success).toBe(true);
+    expect(measurementSchema.safeParse({ ...bp, ...sdk }).success).toBe(true);
+  });
+  it('requires diastolic below systolic for blood pressure', () => {
+    const bp = {
+      ...base,
+      metric: 'blood_pressure',
+      unit: 'mmHg',
+      value: 120,
+      method: 'licensed_sdk',
+    };
+    expect(measurementSchema.safeParse(bp).success).toBe(false);
+    expect(measurementSchema.safeParse({ ...bp, value_secondary: 125 }).success).toBe(false);
+  });
+  it('never lets a licensed SDK report pipeline metrics', () => {
+    expect(measurementSchema.safeParse({ ...base, method: 'licensed_sdk' }).success).toBe(false);
   });
   it('keeps simulated values tied to demo fixtures', () => {
     expect(measurementSchema.safeParse({ ...base, status: 'simulated' }).success).toBe(false);

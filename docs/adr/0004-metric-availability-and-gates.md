@@ -4,13 +4,13 @@ Date: 2026-11-26 · Status: Accepted (product owner chose "Show as labelled esti
 
 ## Decision
 
-| Metric         | Status                                               | Method                                                                            |
-| -------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Heart rate     | Shown as **Estimate, not validated** when gates pass | POS (Wang et al. 2017) → Butterworth 0.7–3 Hz → Welch spectral peak               |
-| HRV (RMSSD)    | Shown as estimate when gates pass                    | Peak detection with parabolic refinement, local-median IBI rejection              |
-| Breathing rate | Shown as estimate when gates pass                    | Agreement of two estimators: RSA from IBI series and low-frequency skin intensity |
-| SpO₂           | **Always "Not available"**                           | Ordinary RGB face video is not a validated SpO₂ method                            |
-| Blood pressure | **Always "Not available"**                           | Camera-only BP is not a substitute for a validated cuff                           |
+| Metric         | Status                                                              | Method                                                                            |
+| -------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Heart rate     | Shown as **Estimate, not validated** when gates pass                | POS (Wang et al. 2017) → Butterworth 0.7–3 Hz → Welch spectral peak               |
+| HRV (RMSSD)    | Shown as estimate when gates pass                                   | Peak detection with parabolic refinement, local-median IBI rejection              |
+| Breathing rate | Shown as estimate when gates pass                                   | Agreement of two estimators: RSA from IBI series and low-frequency skin intensity |
+| SpO₂           | **"Not available"** from our pipeline (licensed SDK only, ADR 0007) | Ordinary RGB face video is not a validated SpO₂ method                            |
+| Blood pressure | **"Not available"** from our pipeline (licensed SDK only, ADR 0007) | Camera-only BP is not a substitute for a validated cuff                           |
 
 ### Gates (config `v0-engineering-defaults`, `packages/measurement/src/config.ts`)
 

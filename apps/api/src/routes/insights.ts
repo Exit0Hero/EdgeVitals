@@ -14,6 +14,7 @@ import {
   relativeToBaseline,
   trendsQuerySchema,
   validSamples,
+  PERIOD_DAYS,
   type AssessmentRecord,
   type BaselineProgress,
 } from '@edgevitals/domain';
@@ -32,11 +33,45 @@ function vitals(r: AssessmentRecord | undefined, baseline: BaselineProgress) {
       metric: m.metric,
       status: m.status,
       value: m.status === 'valid' ? m.value : null,
+      value_secondary: m.status === 'valid' ? (m.valueSecondary ?? null) : null,
+      method: m.method ?? null,
       relative: relativeToBaseline(
         m.status === 'valid' ? m.value : null,
         baseline.metrics.find((b) => b.metric === m.metric),
       ),
     })),
+  };
+}
+
+/**
+ * Most recent valid blood pressure in the period. Only a licensed SDK can
+ * produce one (ADR 0007); without it this stays "unavailable".
+ */
+function latestSdkBloodPressure(records: AssessmentRecord[], now: Date, days: number) {
+  const since = now.getTime() - days * 86_400_000;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const r = records[i]!;
+    if (r.demo || new Date(r.startedAt).getTime() < since) continue;
+    const m = r.measurements.find(
+      (x) => x.metric === 'blood_pressure' && x.status === 'valid' && x.method === 'licensed_sdk',
+    );
+    if (m && m.value !== null && m.valueSecondary != null)
+      return {
+        value: m.value,
+        value_secondary: m.valueSecondary,
+        measured_at: r.startedAt,
+        source: m.algorithm ?? null,
+        relative: 'unavailable' as const,
+        reason: null,
+      };
+  }
+  return {
+    value: null,
+    value_secondary: null,
+    measured_at: null,
+    source: null,
+    relative: 'unavailable' as const,
+    reason: 'unsupported_method',
   };
 }
 
@@ -139,7 +174,7 @@ export async function insightRoutes(app: FastifyInstance) {
           ),
           sample_count: hr.length,
         },
-        blood_pressure: { value: null, relative: 'unavailable', reason: 'unsupported_method' },
+        blood_pressure: latestSdkBloodPressure(records, now, PERIOD_DAYS[q.period]),
       },
     };
   });

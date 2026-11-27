@@ -54,6 +54,8 @@ export default function Trends() {
   const isScore = metric === 'recovery' || metric === 'stress' || metric === 'energy';
   const rhr = data?.summaries.resting_heart_rate;
   const rhrTag = rhr ? relativeLabel(rhr.relative) : null;
+  // Latest licensed-SDK blood pressure in the period (ADR 0007).
+  const bp = data?.summaries.blood_pressure;
 
   return (
     <SafeAreaView
@@ -258,9 +260,20 @@ export default function Trends() {
                 <T variant="body" style={{ flex: 1 }}>
                   Blood pressure
                 </T>
-                <T variant="small" color={colors.muted}>
-                  Not available from the camera
-                </T>
+                {bp?.value != null && bp.value_secondary != null ? (
+                  <>
+                    <T variant="label" style={{ textAlign: 'right' }}>
+                      {`${bp.value}/${bp.value_secondary} mmHg`}
+                    </T>
+                    <View style={{ width: 90, alignItems: 'flex-end' }}>
+                      <StatusPill label="Estimate" tone="muted" />
+                    </View>
+                  </>
+                ) : (
+                  <T variant="small" color={colors.muted}>
+                    Not available from the camera
+                  </T>
+                )}
               </View>
             </View>
           </View>

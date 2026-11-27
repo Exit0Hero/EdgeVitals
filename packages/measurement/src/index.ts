@@ -8,3 +8,4 @@ export * from './estimators';
 export * from './pipeline';
 export * from './session';
 export * from './yuv';
+export * from './sdkProvider';

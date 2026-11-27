@@ -8,6 +8,10 @@ export interface VitalValue {
   metric: string;
   status: string;
   value: number | null;
+  /** Diastolic, for blood pressure. */
+  value_secondary?: number | null;
+  /** licensed_sdk marks a vendor wellness estimate (ADR 0007). */
+  method?: string | null;
   relative?: RelativeStatus;
   reason?: string | null;
 }
@@ -17,14 +21,27 @@ export const sortVitals = <V extends { metric: string }>(v: V[]) =>
   [...v].sort((a, b) => ORDER.indexOf(a.metric) - ORDER.indexOf(b.metric));
 
 function display(v: VitalValue): { main: string; unit: string | null; note: string | null } {
-  if (v.value !== null && (v.status === 'valid' || v.status === 'simulated')) {
+  const bpPair = v.metric === 'blood_pressure';
+  if (
+    v.value !== null &&
+    (v.status === 'valid' || v.status === 'simulated') &&
+    (!bpPair || v.value_secondary != null)
+  ) {
     return {
-      main: String(Math.round(v.value)),
+      main: bpPair
+        ? `${Math.round(v.value)}/${Math.round(v.value_secondary!)}`
+        : String(Math.round(v.value)),
       unit: METRIC_UNIT[v.metric] ?? null,
-      note: v.status === 'simulated' ? 'Demo data' : null,
+      note:
+        v.status === 'simulated'
+          ? 'Demo data'
+          : v.method === 'licensed_sdk'
+            ? 'Wellness estimate'
+            : null,
     };
   }
-  const unsupported = v.metric === 'spo2' || v.metric === 'blood_pressure';
+  const unsupported =
+    (v.metric === 'spo2' || v.metric === 'blood_pressure') && v.method !== 'licensed_sdk';
   return {
     main: '—',
     unit: null,
@@ -122,6 +139,8 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
             <View style={{ width: 84, alignItems: 'flex-end' }}>
               {d.note === 'Demo data' ? (
                 <StatusPill label="Demo" tone="muted" />
+              ) : d.note === 'Wellness estimate' ? (
+                <StatusPill label="Estimate" tone="muted" />
               ) : rel && d.main !== '—' ? (
                 <StatusPill label={rel.label} tone={rel.tone} />
               ) : null}

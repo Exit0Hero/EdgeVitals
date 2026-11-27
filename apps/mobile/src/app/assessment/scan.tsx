@@ -11,6 +11,7 @@ import { PrimaryButton, T, TextButton } from '../../components/ui';
 import { deviceTimeZone, uuid } from '../../lib/id';
 import { toSubmission } from '../../lib/measurements';
 import { demoMeasurements } from '../../lib/demo';
+import { withSdkVitals } from '../../vitals-sdk';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
 
@@ -73,8 +74,10 @@ export default function Scan() {
       if (!a?.assessmentId || !session.current || finishing.current) return;
       finishing.current = true;
       setPhase('submitting');
-      const result = cancelled ? session.current.cancel() : session.current.finish();
+      const pipelineResult = cancelled ? session.current.cancel() : session.current.finish();
       try {
+        // SpO2 and BP only ever come from a licensed SDK; without one they stay unavailable.
+        const result = cancelled ? pipelineResult : await withSdkVitals(pipelineResult);
         if (cancelled) {
           await api.setStatus(a.assessmentId, 'cancelled').catch(() => undefined);
           setAssessment(() => null);

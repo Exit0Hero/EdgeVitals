@@ -16,7 +16,8 @@ import { parse } from '../validate';
 import { consentState } from './me';
 
 const idParam = z.object({ id: z.uuid() });
-const SUPPORTED_COUNT = 3; // heart_rate, hrv, breathing_rate (ADR 0004)
+/** Metrics the EdgeVitals pipeline itself measures (ADR 0004); they decide "completed". */
+const PIPELINE_METRICS = new Set(['heart_rate', 'hrv', 'breathing_rate']);
 
 /** Allowed client-driven transitions; completed/partial only come from a measurement submission. */
 const ORDER: AssessmentStatus[] = [
@@ -255,6 +256,9 @@ export async function assessmentRoutes(app: FastifyInstance) {
         );
       }
       const withValue = body.measurements.filter((m) => m.value !== null).length;
+      const pipelineValues = body.measurements.filter(
+        (m) => m.value !== null && PIPELINE_METRICS.has(m.metric),
+      ).length;
       let status: AssessmentStatus;
       if (body.outcome === 'cancelled') {
         if (withValue > 0)
@@ -262,7 +266,11 @@ export async function assessmentRoutes(app: FastifyInstance) {
         status = 'cancelled';
       } else {
         status =
-          withValue === 0 ? 'failed' : withValue >= SUPPORTED_COUNT ? 'completed' : 'partial';
+          withValue === 0
+            ? 'failed'
+            : pipelineValues >= PIPELINE_METRICS.size
+              ? 'completed'
+              : 'partial';
       }
       for (const m of body.measurements) {
         await c.query(

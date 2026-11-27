@@ -38,6 +38,12 @@ export interface MeasurementRecord {
   metric: Metric;
   status: MeasurementStatus;
   value: number | null;
+  /** Diastolic blood pressure; null for every other metric. */
+  valueSecondary?: number | null;
+  /** camera_rppg, demo_fixture or licensed_sdk (ADR 0007). */
+  method?: string;
+  /** Vendor id for licensed_sdk readings, e.g. "sdk-binah". */
+  algorithm?: string;
 }
 
 export interface AssessmentRecord {
