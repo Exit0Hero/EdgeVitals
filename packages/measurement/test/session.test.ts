@@ -96,9 +96,11 @@ describe('ScanSession', () => {
     for (const f of truth.frames)
       s.pushFrame({ t: f.t, faces: [f.face!], roi: f.roi, frameWidth: 640, frameHeight: 640 });
     const lines = s.exportTrace().split('\n');
-    expect(lines[0]).toMatch(/^edgevitals-trace v2/);
+    expect(lines[0]).toMatch(/^edgevitals-trace v3/);
     expect(lines).toHaveLength(truth.frames.length + 1);
-    const [dt, r, g, b, u, skin] = lines[2]!.split(',').map(Number);
+    const cols = lines[2]!.split(',').map(Number);
+    expect(cols).toHaveLength(17);
+    const [dt, r, g, b, u, skin] = cols;
     expect(skin).toBe(2000);
     expect(dt).toBeGreaterThan(0);
     expect(r! * g! * b!).toBeGreaterThan(0);

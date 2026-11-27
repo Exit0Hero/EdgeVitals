@@ -179,5 +179,7 @@ describe('YUV ROI extraction', () => {
     const masked = extractRoiYuv(frame2, face, 90, false, 2, mask);
     expect(unmasked.skinPixels).toBeLessThan(first.skinPixels);
     expect(masked.skinPixels).toBe(first.skinPixels);
+    // Per-region counts add up to the total.
+    expect(first.regions!.reduce((a, r) => a + r.n, 0)).toBe(first.skinPixels);
   });
 });

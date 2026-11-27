@@ -349,7 +349,29 @@ function signalStats(seg: FrameSample[], g: number[], fs: number): SignalStatsDi
     maxStepPct: round(100 * maxStep, 2),
     intervalP10Ms: round(pct(0.1), 1),
     intervalP90Ms: round(pct(0.9), 1),
+    regionSnrDb: regionSnr(seg, fs),
   };
+}
+
+/** Pulse SNR of each ROI region on its own, when every analysed frame has it. */
+function regionSnr(seg: FrameSample[], fs: number): (number | null)[] | undefined {
+  const first = seg[0]?.roi?.regions;
+  if (!first) return undefined;
+  const t = seg.map((f) => f.t / 1000);
+  return first.map((_, k) => {
+    if (!seg.every((f) => (f.roi!.regions?.[k]?.n ?? 0) > 0)) return null;
+    const ch = (c: 'r' | 'g' | 'b') =>
+      resampleUniform(
+        t,
+        seg.map((f) => f.roi!.regions![k]![c]),
+        fs,
+      );
+    const hr = estimateHeartRate(
+      pos(ch('r'), ch('g'), ch('b'), Math.round(cfg.posWindowSec * fs)),
+      fs,
+    );
+    return hr ? round(hr.snrDb, 2) : null;
+  });
 }
 
 function hrQualityFor(snrDb: number): number {

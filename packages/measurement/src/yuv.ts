@@ -151,9 +151,14 @@ export function extractRoiYuv(
     lumaSum = 0,
     clipped = 0,
     k = 0;
+  const per: { r: number; g: number; b: number; n: number }[] = [];
   const useMask = mask !== null && mask.ready;
   const fillMask = mask !== null && !mask.ready;
   for (const reg of regions) {
+    let rr = 0,
+      rg = 0,
+      rb = 0,
+      rn = 0;
     const u0 = Math.max(0, Math.floor(face.x + reg[0]! * face.width));
     const u1 = Math.min(upright.width, Math.ceil(face.x + reg[1]! * face.width));
     const v0 = Math.max(0, Math.floor(face.y + reg[2]! * face.height));
@@ -192,13 +197,18 @@ export function extractRoiYuv(
         }
         k++;
         if (!clip && isSkin) {
-          sr += r;
-          sg += g;
-          sb += b;
-          skin++;
+          rr += r;
+          rg += g;
+          rb += b;
+          rn++;
         }
       }
     }
+    sr += rr;
+    sg += rg;
+    sb += rb;
+    skin += rn;
+    per.push(rn ? { r: rr / rn, g: rg / rn, b: rb / rn, n: rn } : { r: 0, g: 0, b: 0, n: 0 });
   }
   if (fillMask) mask.ready = true;
   return {
@@ -208,6 +218,7 @@ export function extractRoiYuv(
     skinPixels: skin,
     luma: sampled ? lumaSum / sampled : 0,
     clippedFraction: sampled ? clipped / sampled : 0,
+    regions: per,
   };
 }
 

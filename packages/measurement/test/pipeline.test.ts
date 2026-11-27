@@ -139,4 +139,24 @@ describe('rPPG pipeline on synthetic ground truth', () => {
     const res = analyzeSession(frames);
     expect(res.diagnostics.usableDurationSec).toBeLessThan(25.5);
   });
+
+  it('reports pulse SNR for each face region when regions are present', () => {
+    const truth = syntheticSession({ seed: 4, noise: 0.15 });
+    const frames = truth.frames.map((f, i) => {
+      const c = f.roi!;
+      // Right cheek gets no pulse: only noise around a constant colour.
+      const flat = {
+        r: 175 + Math.sin(i * 7.1) * 0.3,
+        g: 125 + Math.cos(i * 5.3) * 0.3,
+        b: 105,
+        n: 600,
+      };
+      return { ...f, roi: { ...c, regions: [{ ...c, n: 700 }, { ...c, n: 700 }, flat] } };
+    });
+    const snr = analyzeSession(frames).diagnostics.signal!.regionSnrDb!;
+    expect(snr).toHaveLength(3);
+    expect(snr[0]!).toBeGreaterThan(0);
+    expect(snr[1]!).toBeGreaterThan(0);
+    expect(snr[2] == null || snr[2] < snr[0]!).toBe(true);
+  });
 });

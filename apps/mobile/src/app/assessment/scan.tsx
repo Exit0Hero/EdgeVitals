@@ -36,6 +36,13 @@ const TILE_LABEL: Record<string, string> = {
  * to track down the Android camera crash. That crash is fixed, so they are
  * hidden unless a build sets EXPO_PUBLIC_CAMERA_DIAGNOSTICS=1.
  */
+/** Live pulse-signal strength, shown once 15 s of clean signal exists. Gate: SNR >= -2 dB. */
+function pulseSignalText(snrDb: number | null): string {
+  if (snrDb === null) return '';
+  const label = snrDb >= 3 ? 'strong' : snrDb >= -2 ? 'fair' : 'weak';
+  return ` • pulse signal ${label} (${snrDb.toFixed(1)} dB)`;
+}
+
 const CAMERA_DIAGNOSTICS = process.env.EXPO_PUBLIC_CAMERA_DIAGNOSTICS === '1';
 
 export default function Scan() {
@@ -501,7 +508,7 @@ export default function Scan() {
               <T variant="small" color={colors.muted}>
                 {framesReceived === 0
                   ? 'Waiting for processed frames. No measurements received yet.'
-                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (45 seconds needed)`}
+                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (45 seconds needed)${pulseSignalText(live?.interimSnrDb ?? null)}`}
               </T>
             ) : null}
             {diagnosticMode === 'preview' ? (

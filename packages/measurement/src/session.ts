@@ -27,6 +27,8 @@ export interface LiveScanState {
   interimHrv: number | null;
   /** Interim breathing estimate passing the full quality gates, if any. */
   interimBreathingRate: number | null;
+  /** Pulse SNR (dB) of the signal so far, updated every 2 s after 15 s; null before. */
+  interimSnrDb: number | null;
 }
 
 export interface FrameInput {
@@ -50,6 +52,7 @@ export class ScanSession {
   private interimHr: number | null = null;
   private interimHrv: number | null = null;
   private interimBreathing: number | null = null;
+  private interimSnr: number | null = null;
   private done = false;
 
   constructor(
@@ -134,6 +137,7 @@ export class ScanSession {
       this.interimHr = currentValue('heart_rate');
       this.interimHrv = currentValue('hrv');
       this.interimBreathing = currentValue('breathing_rate');
+      this.interimSnr = res.diagnostics.hrSnrDb;
     }
 
     const metrics = {} as Record<MetricId, LiveMetricState>;
@@ -158,6 +162,7 @@ export class ScanSession {
       interimHeartRate: this.interimHr,
       interimHrv: this.interimHrv,
       interimBreathingRate: this.interimBreathing,
+      interimSnrDb: this.interimSnr,
     };
   }
 
@@ -180,21 +185,37 @@ export class ScanSession {
    * test phone to debug a failed scan. Aggregates only (three numbers per
    * frame), never pixels. Must be called before finish()/cancel().
    *
-   * Format: header line, then one `dt,r,g,b,u,skin` line per frame: dt = ms
-   * since the previous frame, r/g/b = mean skin colour x100 (integers), u = 1
-   * if the frame was usable, skin = skin pixels averaged. Frames without a
-   * ROI have zeros.
+   * Format (v3): header line, then one line per frame: dt = ms since the
+   * previous frame, r/g/b = mean skin colour x100, usable (1/0), skin pixels
+   * averaged, mean ROI luma x10, face box width in px, then r/g/b x100 for the
+   * forehead, left cheek and right cheek. Missing values are 0.
    */
   exportTrace(): string {
-    const lines = ['edgevitals-trace v2 dt_ms,r100,g100,b100,usable,skin_px'];
+    const lines = [
+      'edgevitals-trace v3 dt_ms,r100,g100,b100,usable,skin_px,luma10,face_w,' +
+        'fh_r,fh_g,fh_b,lc_r,lc_g,lc_b,rc_r,rc_g,rc_b',
+    ];
+    const x100 = (v: number | undefined) => Math.round((v ?? 0) * 100);
     let prev: number | null = null;
     for (const f of this.frames) {
       const dt = prev === null ? 0 : Math.round(f.t - prev);
       prev = f.t;
       const c = f.roi;
-      lines.push(
-        `${dt},${c ? Math.round(c.r * 100) : 0},${c ? Math.round(c.g * 100) : 0},${c ? Math.round(c.b * 100) : 0},${f.usable ? 1 : 0},${c ? c.skinPixels : 0}`,
-      );
+      const cols = [
+        dt,
+        x100(c?.r),
+        x100(c?.g),
+        x100(c?.b),
+        f.usable ? 1 : 0,
+        c?.skinPixels ?? 0,
+        Math.round((c?.luma ?? 0) * 10),
+        Math.round(f.face?.width ?? 0),
+      ];
+      for (let k = 0; k < 3; k++) {
+        const reg = c?.regions?.[k];
+        cols.push(x100(reg?.r), x100(reg?.g), x100(reg?.b));
+      }
+      lines.push(cols.join(','));
     }
     return lines.join('\n');
   }
@@ -217,5 +238,6 @@ export class ScanSession {
     this.interimHr = null;
     this.interimHrv = null;
     this.interimBreathing = null;
+    this.interimSnr = null;
   }
 }

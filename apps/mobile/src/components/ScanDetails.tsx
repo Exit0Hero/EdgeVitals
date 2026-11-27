@@ -55,6 +55,10 @@ export function describeScan(r: SessionResult): string[] {
     lines.push(
       `Biggest frame-to-frame brightness jump: ${s.maxStepPct}% · frame gaps ${s.intervalP10Ms}-${s.intervalP90Ms} ms`,
     );
+    if (s.regionSnrDb) {
+      const [fh, lc, rc] = s.regionSnrDb.map((v) => (v === null ? '—' : `${v} dB`));
+      lines.push(`Pulse SNR by area: forehead ${fh} · left cheek ${lc} · right cheek ${rc}`);
+    }
   }
   for (const m of r.metrics) {
     if (m.metric === 'spo2' || m.metric === 'blood_pressure') continue;
