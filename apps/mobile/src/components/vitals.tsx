@@ -106,7 +106,7 @@ export function VitalTiles({ vitals, testID }: { vitals: VitalValue[]; testID?: 
 export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
   return (
     <View>
-      {sortVitals(vitals).map((v) => {
+      {sortVitals(vitals).map((v, i, all) => {
         const d = display(v);
         const rel = v.relative ? relativeLabel(v.relative) : null;
         return (
@@ -120,7 +120,7 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
               flexDirection: 'row',
               alignItems: 'center',
               paddingVertical: 12,
-              borderBottomWidth: 1,
+              borderBottomWidth: i === all.length - 1 ? 0 : 1,
               borderBottomColor: colors.border,
             }}
             testID={`row-${v.metric}`}
@@ -142,7 +142,7 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
                 </T>
               </View>
             )}
-            <View style={{ width: 84, alignItems: 'flex-end' }}>
+            <View style={{ minWidth: 92, marginLeft: space[2], alignItems: 'flex-end' }}>
               {d.note === 'Demo data' ? (
                 <StatusPill label="Demo" tone="muted" />
               ) : d.note === 'Wellness estimate' ? (

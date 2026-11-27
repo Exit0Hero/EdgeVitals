@@ -17,7 +17,13 @@ export type IconName =
   | 'settings'
   | 'camera'
   | 'alert'
-  | 'close';
+  | 'close'
+  | 'wind'
+  | 'face'
+  | 'finger'
+  | 'drop'
+  | 'info'
+  | 'share';
 
 interface Props {
   name: IconName;
@@ -114,6 +120,32 @@ export function Icon({ name, size = 22, color = colors.primary, strokeWidth = 2 
         </>
       )}
       {name === 'close' && <Path d="M6 6l12 12M18 6 6 18" {...p} />}
+      {name === 'wind' && <Path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7" {...p} />}
+      {name === 'face' && (
+        <>
+          <Path d="M12 3c4 0 6.5 3.2 6.5 7.5S15.6 21 12 21s-6.5-6.2-6.5-10.5S8 3 12 3z" {...p} />
+          <Path d="M9.5 10.5v.01M14.5 10.5v.01M10 15.5c1.2.8 2.8.8 4 0" {...p} />
+        </>
+      )}
+      {name === 'finger' && (
+        <>
+          <Path d="M8 21V9a4 4 0 0 1 8 0v12" {...p} />
+          <Path d="M10 9.5a2 2 0 0 1 4 0V12h-4z" {...p} />
+        </>
+      )}
+      {name === 'drop' && <Path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z" {...p} />}
+      {name === 'info' && (
+        <>
+          <Circle cx={12} cy={12} r={9} {...p} />
+          <Path d="M12 11v5.5M12 7.5v.01" {...p} />
+        </>
+      )}
+      {name === 'share' && (
+        <>
+          <Path d="M12 15V4M8 8l4-4 4 4" {...p} />
+          <Path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" {...p} />
+        </>
+      )}
     </Svg>
   );
 }

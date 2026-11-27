@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { api, ApiError, type Assessment, type Dashboard } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
 import { FingerPulseCard } from '../../components/FingerPulseCard';
+import { Icon } from '../../components/Icon';
 import { ScanDetails } from '../../components/ScanDetails';
 import { SyncedVitals } from '../../components/SyncedVitals';
 import {
@@ -21,7 +22,7 @@ import { timeOfDay } from '../../lib/format';
 import { uuid } from '../../lib/id';
 import { useFlow } from '../../state/flow';
 import { scanFor, traceFor } from '../../state/lastScan';
-import { colors, space } from '../../theme/tokens';
+import { colors, radius, space } from '../../theme/tokens';
 
 const RETRY_TIPS = [
   'Sit facing a window or lamp so light falls evenly on your face.',
@@ -147,9 +148,45 @@ export default function Results() {
       <T variant="title" accessibilityRole="header" testID="results-headline">
         {headline}
       </T>
-      <T variant="small" color={colors.muted} style={{ marginBottom: space[5] }}>
+      <T variant="small" color={colors.muted} style={{ marginBottom: space[3] }}>
         {context}
       </T>
+      {!a.demo ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: space[2],
+            marginBottom: space[5],
+          }}
+          testID="results-scan-summary"
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: colors.primarySoft,
+              borderRadius: radius.pill,
+              paddingVertical: 5,
+              paddingHorizontal: space[3],
+            }}
+          >
+            <Icon name={fingerScan ? 'finger' : 'face'} size={15} />
+            <T variant="small" color={colors.primary} style={{ fontWeight: '600' }}>
+              {fingerScan ? 'Finger scan' : 'Face scan'}
+            </T>
+          </View>
+          <T variant="small" color={colors.textSecondary}>
+            {validCount === 1
+              ? '1 reading passed the quality checks'
+              : `${validCount} readings passed the quality checks`}
+          </T>
+        </View>
+      ) : (
+        <View style={{ height: space[2] }} />
+      )}
       {a.demo ? (
         <Banner
           tone="info"
@@ -161,13 +198,35 @@ export default function Results() {
 
       {failed ? (
         <Card tone="surface" testID="failure-tips" style={{ marginBottom: space[5] }}>
-          <T variant="label" style={{ marginBottom: space[2] }}>
-            Nothing is wrong. The camera signal just wasn't clear enough this time.
-          </T>
-          {(fingerScan ? FINGER_RETRY_TIPS : RETRY_TIPS).map((t) => (
-            <T key={t} variant="small" color={colors.textSecondary} style={{ marginBottom: 4 }}>
-              • {t}
+          <View style={{ flexDirection: 'row', gap: space[3], marginBottom: space[3] }}>
+            <Icon name="info" size={20} />
+            <T variant="label" style={{ flex: 1 }}>
+              Nothing is wrong. The camera signal just wasn't clear enough this time.
             </T>
+          </View>
+          <T variant="small" color={colors.muted} style={{ marginBottom: space[2] }}>
+            For your next try
+          </T>
+          {(fingerScan ? FINGER_RETRY_TIPS : RETRY_TIPS).map((t, i) => (
+            <View key={t} style={{ flexDirection: 'row', gap: space[3], marginBottom: space[2] }}>
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: colors.white,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <T variant="tiny" color={colors.primary} style={{ fontWeight: '700' }}>
+                  {String(i + 1)}
+                </T>
+              </View>
+              <T variant="small" color={colors.textSecondary} style={{ flex: 1 }}>
+                {t}
+              </T>
+            </View>
           ))}
         </Card>
       ) : null}
@@ -186,7 +245,9 @@ export default function Results() {
                   {k === 'recovery' ? 'Recovery' : 'Stress'}
                 </T>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                  <T variant="metricLarge">{s ? s.value : '—'}</T>
+                  <T variant="metricLarge" color={s ? colors.text : colors.subtle}>
+                    {s ? s.value : '—'}
+                  </T>
                   <T variant="label" color={colors.primary}>
                     {s?.label ?? ''}
                   </T>
@@ -232,7 +293,9 @@ export default function Results() {
           Not enough personal history yet to compare. Day {dash.baseline.day} of 14.
         </T>
       ) : null}
-      <VitalRows vitals={vitals} />
+      <Card style={{ paddingVertical: space[1], marginBottom: space[5] }} testID="results-vitals">
+        <VitalRows vitals={vitals} />
+      </Card>
       {!a.demo && fingerScan && scanResult ? <FingerPulseCard result={scanResult} /> : null}
       {!a.demo ? <SyncedVitals /> : null}
       {!a.demo ? (
@@ -248,16 +311,30 @@ export default function Results() {
           <ScanDetails result={scanResult} trace={traceFor(a.id)} initiallyOpen={failed} />
         </View>
       ) : null}
-      <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
-        Wellness information only, not for diagnosis. Heart rate, HRV and breathing are{' '}
-        {fingerScan ? 'finger-scan' : 'camera'} estimates that have not been clinically validated.{' '}
-        {sdkVitals
-          ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
-          : experimentalSpo2
-            ? 'SpO₂ is an experimental estimate from a published research method that EdgeVitals has not validated. It can be off by several points and can miss low oxygen, so do not use it for health decisions. Blood pressure is not available from the camera.'
-            : 'SpO₂ and blood pressure are not available from the camera on this device.'}{' '}
-        If readings stay higher than usual, consider talking to a health professional.
-      </T>
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: space[3],
+          alignItems: 'flex-start',
+          backgroundColor: colors.surface,
+          borderRadius: radius.control,
+          padding: space[4],
+          marginTop: space[4],
+        }}
+        testID="results-wellness-note"
+      >
+        <Icon name="shield" size={18} color={colors.textSecondary} />
+        <T variant="small" color={colors.textSecondary} style={{ flex: 1 }}>
+          Wellness information only, not for diagnosis. Heart rate, HRV and breathing are{' '}
+          {fingerScan ? 'finger-scan' : 'camera'} estimates that have not been clinically validated.{' '}
+          {sdkVitals
+            ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
+            : experimentalSpo2
+              ? 'SpO₂ is an experimental estimate from a published research method that EdgeVitals has not validated. It can be off by several points and can miss low oxygen, so do not use it for health decisions. Blood pressure is not available from the camera.'
+              : 'SpO₂ and blood pressure are not available from the camera on this device.'}{' '}
+          If readings stay higher than usual, consider talking to a health professional.
+        </T>
+      </View>
     </Screen>
   );
 }
