@@ -67,3 +67,21 @@ The likely cause is orientation or mirroring. `CameraScanner.tsx` assumes ML Kit
    - Without a computer: Developer options → **Take bug report** →
      Interactive report, reproduce the crash, then share the report from the
      notification.
+
+## Signal trace for a failed scan
+
+When a scan fails, the results screen opens **Scan details**. Besides the
+summary it offers **Share signal trace**: one line per camera frame with the
+time since the previous frame and the mean skin colour (`dt_ms,r×100,g×100,b×100,usable`).
+It holds no images and is only shared when the tester taps the button.
+
+How to read the summary lines:
+
+- **Green only** is the pulse search on the raw green channel, without POS.
+  If it finds the same rate as the POS peak with a reasonable SNR, the colour
+  path works and the problem is in the projection; if neither finds a pulse,
+  the colour signal itself is noisy.
+- **Pulse-band size** is the 0.7-3 Hz variation of green as a % of its mean.
+  A real pulse is roughly 0.1-0.5%. Several % means motion, auto-exposure or
+  lighting flicker dominates.
+- **Biggest brightness jump** above ~1% points to auto-exposure steps.

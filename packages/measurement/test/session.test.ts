@@ -89,4 +89,23 @@ describe('ScanSession', () => {
     }
     expect(s.liveState().usableSec).toBeGreaterThan(44);
   });
+
+  it('exports a compact per-frame colour trace before finishing', () => {
+    const truth = syntheticSession({ durationSec: 20, seed: 3 });
+    const s = new ScanSession();
+    for (const f of truth.frames)
+      s.pushFrame({ t: f.t, faces: [f.face!], roi: f.roi, frameWidth: 640, frameHeight: 640 });
+    const lines = s.exportTrace().split('\n');
+    expect(lines[0]).toMatch(/^edgevitals-trace v1/);
+    expect(lines).toHaveLength(truth.frames.length + 1);
+    const [dt, r, g, b, u] = lines[2]!.split(',').map(Number);
+    expect(dt).toBeGreaterThan(0);
+    expect(r! * g! * b!).toBeGreaterThan(0);
+    expect([0, 1]).toContain(u);
+    const res = s.finish();
+    const sig = res.diagnostics.signal!;
+    expect(Math.abs(sig.greenPeakBpm! - truth.meanHrBpm)).toBeLessThan(3);
+    expect(sig.bandAmplitudePct).toBeGreaterThan(0);
+    expect(sig.intervalP90Ms).toBeGreaterThanOrEqual(sig.intervalP10Ms);
+  });
 });

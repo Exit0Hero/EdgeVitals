@@ -204,3 +204,28 @@ export function smoothFaceBox(
     height: prev.height + alpha * (next.height - prev.height),
   };
 }
+
+/**
+ * Keep the skin-sampling box fixed while the face stays put. Even a smoothed
+ * box drifts by fractions of a pixel, which moves the region edges and the
+ * sampling grid onto different pixels. Holding the box (whole pixels) means
+ * the same skin pixels are averaged frame after frame; it is replaced only
+ * when the face centre moves or the size changes by more than `tolerance` of
+ * the face width.
+ */
+export function holdRoiBox(held: FaceBox | null, box: FaceBox, tolerance = 0.08): FaceBox {
+  'worklet';
+  if (held) {
+    const dx = box.x + box.width / 2 - (held.x + held.width / 2);
+    const dy = box.y + box.height / 2 - (held.y + held.height / 2);
+    const moved = Math.hypot(dx, dy) > tolerance * held.width;
+    const resized = Math.abs(box.width / held.width - 1) > tolerance;
+    if (!moved && !resized) return held;
+  }
+  return {
+    x: Math.round(box.x),
+    y: Math.round(box.y),
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+  };
+}

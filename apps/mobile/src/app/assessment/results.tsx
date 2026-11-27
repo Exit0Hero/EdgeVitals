@@ -18,7 +18,7 @@ import { VitalRows } from '../../components/vitals';
 import { timeOfDay } from '../../lib/format';
 import { uuid } from '../../lib/id';
 import { useFlow } from '../../state/flow';
-import { scanFor } from '../../state/lastScan';
+import { scanFor, traceFor } from '../../state/lastScan';
 import { colors, space } from '../../theme/tokens';
 
 const RETRY_TIPS = [
@@ -233,7 +233,7 @@ export default function Results() {
       {/* On-device statistics for this scan (kept only in memory, never uploaded). */}
       {!a.demo && scanResult ? (
         <View style={{ marginTop: space[4] }}>
-          <ScanDetails result={scanResult} initiallyOpen={failed} />
+          <ScanDetails result={scanResult} trace={traceFor(a.id)} initiallyOpen={failed} />
         </View>
       ) : null}
       <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
