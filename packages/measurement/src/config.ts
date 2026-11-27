@@ -8,7 +8,7 @@
  * whenever a value changes so every stored measurement is traceable.
  */
 export const PIPELINE_VERSION = '0.1.0';
-export const CONFIG_VERSION = 'v0.1-engineering-defaults';
+export const CONFIG_VERSION = 'v0.2-engineering-defaults';
 export const ALGORITHM_NAME = 'pos-welch';
 
 export const PIPELINE_CONFIG = {
@@ -20,6 +20,12 @@ export const PIPELINE_CONFIG = {
   maxScanSec: 90,
   /** A gap longer than this between usable frames breaks the signal segment. */
   maxGapSec: 0.35,
+  /**
+   * A frame-to-frame change of mean skin colour above this fraction (any
+   * channel) splits the signal: it is an exposure/white-balance step, not a
+   * pulse (pulse amplitude is well under 1%).
+   */
+  maxColourStep: 0.03,
   /** POS sliding window length (Wang et al. 2017 use 1.6 s). */
   posWindowSec: 1.6,
   /** Cardiac band, 42-180 bpm. */

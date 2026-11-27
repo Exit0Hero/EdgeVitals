@@ -1,6 +1,7 @@
 import type { SessionResult } from '@edgevitals/measurement';
 import { useState } from 'react';
 import { Platform, Share, View } from 'react-native';
+import { shareTextFile } from '../lib/saveExport';
 import { colors, space } from '../theme/tokens';
 import { Card, T, TextButton } from './ui';
 
@@ -111,15 +112,19 @@ export function ScanDetails({
                 label="Share signal trace"
                 align="flex-start"
                 onPress={() => {
-                  Share.share({
-                    message: `EdgeVitals signal trace (${Platform.OS} ${String(Platform.Version)})\n${trace}`,
-                  }).catch(() => undefined);
+                  // As a file: a 45 s trace is ~20 KB, which chat apps cut off as text.
+                  shareTextFile(
+                    'edgevitals-signal-trace.txt',
+                    `EdgeVitals signal trace (${Platform.OS} ${String(Platform.Version)})\n${trace}`,
+                    'Share signal trace',
+                  ).catch(() => undefined);
                 }}
                 testID="scan-trace-share"
               />
               <T variant="small" color={colors.muted}>
-                The signal trace is the average skin colour of each camera frame. It contains no
-                images, and it is only shared if you tap the button.
+                The signal trace is a text file with the average skin colour of each camera frame.
+                It contains no images, and it is only shared if you tap the button. Send the file
+                itself rather than pasting it, so it is not cut off.
               </T>
             </>
           ) : null}

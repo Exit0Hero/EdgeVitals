@@ -90,4 +90,53 @@ describe('rPPG pipeline on synthetic ground truth', () => {
       if (m.status !== 'valid') expect(m.value).toBeNull();
     }
   });
+
+  it('starts the signal after the exposure ramp seen on a real phone', () => {
+    // First 14 frames of a real Android scan (mean skin colour x100): auto
+    // exposure and white balance ramping by up to 17% per frame.
+    const ramp = [
+      [9637, 6568, 4976],
+      [9646, 6559, 4965],
+      [10826, 7582, 5872],
+      [12347, 8870, 7011],
+      [13016, 9514, 7593],
+      [13720, 10161, 8206],
+      [14101, 10551, 8687],
+      [14789, 11293, 9443],
+      [15719, 12567, 10358],
+      [15895, 12787, 10617],
+      [16267, 13227, 11109],
+      [16300, 13340, 11262],
+      [16282, 13335, 11243],
+      [17279, 14009, 11766],
+    ];
+    const settled = [17450, 13950, 11570];
+    const truth = syntheticSession({ fps: 20, heartRateBpm: 77, noise: 0.15, seed: 2 });
+    const frames = truth.frames.map((f, i) => {
+      const k = ramp[i]?.map((v, j) => v / settled[j]!);
+      return k
+        ? {
+            ...f,
+            roi: { ...f.roi!, r: f.roi!.r * k[0]!, g: f.roi!.g * k[1]!, b: f.roi!.b * k[2]! },
+          }
+        : f;
+    });
+    const res = analyzeSession(frames);
+    // The analysed segment begins once the colour has settled.
+    expect(res.diagnostics.usableDurationSec).toBeGreaterThan(43);
+    expect(res.diagnostics.usableDurationSec).toBeLessThan(44.4);
+    expect(res.diagnostics.signal!.maxStepPct).toBeLessThan(3);
+    expect(Math.abs(byMetric(res, 'heart_rate').value! - truth.meanHrBpm)).toBeLessThanOrEqual(2);
+  });
+
+  it('splits the signal at a sudden lighting change', () => {
+    const truth = syntheticSession({ seed: 9 });
+    const frames = truth.frames.map((f) =>
+      f.t > 20_000
+        ? { ...f, roi: { ...f.roi!, r: f.roi!.r * 1.1, g: f.roi!.g * 1.1, b: f.roi!.b * 1.1 } }
+        : f,
+    );
+    const res = analyzeSession(frames);
+    expect(res.diagnostics.usableDurationSec).toBeLessThan(25.5);
+  });
 });

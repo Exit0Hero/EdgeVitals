@@ -16,3 +16,16 @@ export async function saveExport(name: string, data: unknown): Promise<void> {
     if (file.exists) file.delete();
   }
 }
+
+/** Share plain text as a .txt file, so long text is not cut off by chat apps. */
+export async function shareTextFile(name: string, text: string, title: string): Promise<void> {
+  const file = new File(Paths.cache, name);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(text);
+  try {
+    await Sharing.shareAsync(file.uri, { mimeType: 'text/plain', dialogTitle: title });
+  } finally {
+    if (file.exists) file.delete();
+  }
+}
