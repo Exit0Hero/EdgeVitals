@@ -1,0 +1,25 @@
+# Weekly dependency update PRs (free). Security advisories also open PRs as
+# soon as they are published. Expo SDK packages move together, so review
+# Expo/React Native bumps against `npx expo install --check` before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      api-runtime:
+        patterns: ['fastify', '@fastify/*', 'pg', 'jose', 'zod', '@node-rs/*']
+      dev-tooling:
+        dependency-type: development
+    ignore:
+      # Expo SDK upgrades are done deliberately, not by bot.
+      - dependency-name: 'expo'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-native'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

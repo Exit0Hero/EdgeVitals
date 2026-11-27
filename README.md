@@ -49,6 +49,8 @@ Phone test builds: **Actions → Build test app** (Expo EAS, needs the `EXPO_TOK
 
 Docker images, environment variables, migrations, hosting headers and the launch checklist: `docs/deployment.md`.
 
+What is release-ready and what still needs a decision or an account: `docs/production-readiness.md`.
+
 Staging runs on Render's free tier (`render.yaml`, Singapore): `docs/render-staging.md`.
 
 > **Ops note: PRs that add a migration.** Nothing manual is needed any more: the staging API applies pending migrations when the new version starts (`MIGRATE_ON_START=true`), and a failed migration leaves the previous version serving. Migrations must stay backward compatible; CI checks this. Details and the manual fallback: `docs/render-staging.md`.

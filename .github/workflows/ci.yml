@@ -31,6 +31,27 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # Dependency and secret scanning (docs 14 section 3, step 6).
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Runtime dependencies only; fails on high or critical advisories.
+      # Moderate findings are reviewed in docs/security-accessibility-review.md.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      # Free for personal accounts. An organization-owned copy of the repository
+      # needs a GITLEAKS_LICENSE secret (gitleaks.io).
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Builds both production images and smoke-tests the API image against Postgres.
   images:
     runs-on: ubuntu-latest
