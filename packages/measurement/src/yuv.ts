@@ -177,3 +177,30 @@ export function extractRoiYuv(
     clippedFraction: sampled ? clipped / sampled : 0,
   };
 }
+
+/**
+ * Exponentially smooth a face box between frames. Face detectors move their
+ * box by a few pixels every frame even when the head is still; because the
+ * ROI follows the box, that jitter slides skin/hair/eyebrow edges in and out
+ * of the sampled regions and adds colour noise far larger than the <1% pulse
+ * signal. A real move (centre shift above `resetFraction` of the face width)
+ * snaps to the new box instead of lagging behind it.
+ */
+export function smoothFaceBox(
+  prev: FaceBox | null,
+  next: FaceBox,
+  alpha = 0.25,
+  resetFraction = 0.25,
+): FaceBox {
+  'worklet';
+  if (!prev) return next;
+  const dx = next.x + next.width / 2 - (prev.x + prev.width / 2);
+  const dy = next.y + next.height / 2 - (prev.y + prev.height / 2);
+  if (Math.hypot(dx, dy) > resetFraction * prev.width) return next;
+  return {
+    x: prev.x + alpha * (next.x - prev.x),
+    y: prev.y + alpha * (next.y - prev.y),
+    width: prev.width + alpha * (next.width - prev.width),
+    height: prev.height + alpha * (next.height - prev.height),
+  };
+}

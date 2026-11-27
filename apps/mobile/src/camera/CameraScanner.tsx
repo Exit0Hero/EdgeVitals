@@ -2,6 +2,7 @@ import {
   extractRoiYuv,
   inferPixelStride,
   orientationToRotation,
+  smoothFaceBox,
   uprightSize,
   type FaceBox,
   type FrameInput,
@@ -327,6 +328,18 @@ function processFrame(
       rotation = 0;
       mirrored = false;
     }
+  }
+  // Smooth the primary box across frames (state lives on this frame-thread
+  // runtime). A gap of more than 0.5 s starts fresh.
+  if (boxes.length > 0) {
+    const g = globalThis as { __evFaceBox?: { box: FaceBox; ts: number; scale: number } };
+    const ts = frame.timestamp;
+    const prevState = g.__evFaceBox;
+    const prevBox =
+      prevState && Math.abs(ts - prevState.ts) * prevState.scale < 500 ? prevState.box : null;
+    const smoothed = smoothFaceBox(prevBox, boxes[0]!);
+    boxes[0] = smoothed;
+    g.__evFaceBox = { box: smoothed, ts, scale: TIMESTAMP_SCALE };
   }
   const up = uprightSize(frame.width, frame.height, rotation);
   if (mode === 'face') {

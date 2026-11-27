@@ -12,6 +12,7 @@ import { deviceTimeZone, uuid } from '../../lib/id';
 import { toSubmission } from '../../lib/measurements';
 import { demoMeasurements } from '../../lib/demo';
 import { withSdkVitals } from '../../vitals-sdk';
+import { rememberScan } from '../../state/lastScan';
 import { getExperimentalSpo2 } from '../../lib/experimental';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
@@ -102,6 +103,7 @@ export default function Scan() {
           router.dismissTo('/today');
           return;
         }
+        rememberScan(a.assessmentId, result);
         await api.submitMeasurements(a.assessmentId, toSubmission(result));
         setAssessment((d) => (d ? { ...d, result } : d));
         router.replace({ pathname: '/assessment/results', params: { id: a.assessmentId } });

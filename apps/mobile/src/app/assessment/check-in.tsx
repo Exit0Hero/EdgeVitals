@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
 import {
@@ -45,8 +45,13 @@ export default function CheckIn() {
       .catch(() => setResolvedKind(new Date().getHours() < 15 ? 'morning' : 'evening'));
   }, [resolvedKind, a]);
 
+  // Start a fresh draft once, when this screen opens. This screen stays mounted
+  // under prepare/scan/results, so re-running this when the scan stores its
+  // result would wipe that result (and the results screen's scan details).
+  const draftChecked = useRef(false);
   useEffect(() => {
-    if (!resolvedKind || !me?.schedule) return;
+    if (!resolvedKind || !me?.schedule || draftChecked.current) return;
+    draftChecked.current = true;
     if (a && a.kind === resolvedKind && !a.result) return;
     setAssessment(() => ({
       kind: resolvedKind,
