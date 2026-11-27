@@ -48,7 +48,7 @@ jobs:
       # Free for personal accounts. An organization-owned copy of the repository
       # needs a GITLEAKS_LICENSE secret (gitleaks.io).
       - name: Scan for committed secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
