@@ -35,6 +35,7 @@ function vitals(r: AssessmentRecord | undefined, baseline: BaselineProgress) {
       value: m.status === 'valid' ? m.value : null,
       value_secondary: m.status === 'valid' ? (m.valueSecondary ?? null) : null,
       method: m.method ?? null,
+      reason: m.status === 'valid' ? null : (m.reason ?? null),
       relative: relativeToBaseline(
         m.status === 'valid' ? m.value : null,
         baseline.metrics.find((b) => b.metric === m.metric),
@@ -222,6 +223,42 @@ export async function insightRoutes(app: FastifyInstance) {
     return candidates.reduce((a, b) => (b.measured_at! > a.measured_at! ? b : a));
   };
 
+  /**
+   * Newest SpO2 in the period: synced from the user's own devices (ADR 0009)
+   * or, when they opted in, the experimental face-scan estimate (ADR 0008),
+   * labelled by `source`. Null when there is neither.
+   */
+  const latestSpo2 = async (
+    userId: string,
+    records: AssessmentRecord[],
+    now: Date,
+    days: number,
+  ) => {
+    const synced = await latestSynced(userId, 'spo2', now, days);
+    const since = now.getTime() - days * 86_400_000;
+    let camera = null;
+    for (let i = records.length - 1; i >= 0 && !camera; i--) {
+      const r = records[i]!;
+      if (r.demo || new Date(r.startedAt).getTime() < since) continue;
+      const m = r.measurements.find(
+        (x) => x.metric === 'spo2' && x.status === 'valid' && x.method === 'camera_experimental',
+      );
+      if (m && m.value !== null)
+        camera = {
+          value: m.value,
+          value_secondary: null,
+          measured_at: r.startedAt,
+          source: 'camera_experimental' as const,
+          source_detail: null,
+          relative: 'unavailable' as const,
+          reason: null,
+        };
+    }
+    if (!synced) return camera;
+    if (!camera) return synced;
+    return camera.measured_at > synced.measured_at ? camera : synced;
+  };
+
   app.get('/trends', async (req) => {
     const q = parse(trendsQuerySchema, req.query);
     const { records, tz, now } = await context(req.userId!);
@@ -248,8 +285,7 @@ export async function insightRoutes(app: FastifyInstance) {
           sample_count: hr.length,
         },
         blood_pressure: await latestBloodPressure(req.userId!, records, now, PERIOD_DAYS[q.period]),
-        // Only from the user's own devices via their health app; null when none (ADR 0009).
-        spo2: await latestSynced(req.userId!, 'spo2', now, PERIOD_DAYS[q.period]),
+        spo2: await latestSpo2(req.userId!, records, now, PERIOD_DAYS[q.period]),
       },
     };
   });

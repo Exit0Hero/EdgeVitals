@@ -357,7 +357,14 @@ export const submitMeasurementsSchema = z.object({
     .optional(),
 });
 
-export const TREND_METRICS = ['recovery', 'stress', 'energy', 'hrv', 'heart_rate'] as const;
+export const TREND_METRICS = [
+  'recovery',
+  'stress',
+  'energy',
+  'hrv',
+  'heart_rate',
+  'breathing_rate',
+] as const;
 export type TrendMetric = (typeof TREND_METRICS)[number];
 export const TREND_PERIODS = ['7d', '30d', '90d'] as const;
 export type TrendPeriod = (typeof TREND_PERIODS)[number];

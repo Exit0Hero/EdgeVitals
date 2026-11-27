@@ -165,6 +165,25 @@ describe('trends', () => {
     expect(t30.sampleCount).toBe(30);
   });
 
+  it('trends breathing rate from morning scans, with a usual range once ready', () => {
+    const recs = history(40).map((r, i) => ({
+      ...r,
+      measurements: [
+        ...r.measurements,
+        { metric: 'breathing_rate' as const, status: 'valid' as const, value: 14 + (i % 3) },
+      ],
+    }));
+    const t = computeTrend(recs, 'breathing_rate', '7d', at(day(39)), 'UTC');
+    expect(t.unit).toBe('/min');
+    expect(t.sampleCount).toBe(7);
+    expect(t.points.at(-1)!.value).toBe(14 + (39 % 3));
+    expect(t.usualRange).not.toBeNull();
+    // Without breathing readings the trend is empty, never filled in.
+    expect(computeTrend(history(40), 'breathing_rate', '7d', at(day(39)), 'UTC').sampleCount).toBe(
+      0,
+    );
+  });
+
   it('has no recovery points before day 14', () => {
     const t = computeTrend(history(20), 'recovery', '30d', at(day(19)), 'UTC');
     const withValues = t.points.filter((p) => p.value !== null).map((p) => p.date);

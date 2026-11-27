@@ -219,6 +219,8 @@ export interface VitalsSummary {
     value: number | null;
     value_secondary?: number | null;
     method?: string | null;
+    /** Why the value is missing; null when valid. */
+    reason?: string | null;
     relative: RelativeStatus;
   }[];
 }
@@ -261,13 +263,17 @@ export type Trends = TrendSeries & {
       relative: 'unavailable';
       reason: string | null;
     };
-    /** Newest SpO2 synced from the user's own devices (ADR 0009), or null. */
+    /**
+     * Newest SpO2: synced from the user's own devices (ADR 0009), or the
+     * opt-in experimental face-scan estimate ('camera_experimental', ADR 0008,
+     * source_detail null). Null when there is neither.
+     */
     spo2?: {
       value: number;
       value_secondary: null;
       measured_at: string;
-      source: HealthSyncPlatform;
-      source_detail: HealthSyncSource;
+      source: HealthSyncPlatform | 'camera_experimental';
+      source_detail: HealthSyncSource | null;
     } | null;
   };
 };

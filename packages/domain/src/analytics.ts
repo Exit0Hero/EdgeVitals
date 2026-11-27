@@ -44,6 +44,8 @@ export interface MeasurementRecord {
   method?: string;
   /** Vendor id for licensed_sdk readings, e.g. "sdk-binah". */
   algorithm?: string;
+  /** Why a value is missing (UnavailableReason), null when valid. */
+  reason?: string | null;
 }
 
 export interface AssessmentRecord {
@@ -384,7 +386,11 @@ const TREND_UNIT: Record<TrendMetric, string> = {
   energy: '',
   hrv: 'ms',
   heart_rate: 'bpm',
+  breathing_rate: '/min',
 };
+
+const isVitalTrend = (m: TrendMetric): m is 'hrv' | 'heart_rate' | 'breathing_rate' =>
+  m === 'hrv' || m === 'heart_rate' || m === 'breathing_rate';
 
 /** Rolling baseline as of a given date (uses only data up to that day). */
 function baselineAsOf(records: AssessmentRecord[], date: string, tz: string): BaselineProgress {
@@ -412,7 +418,7 @@ export function computeTrend(
     const d = byDay.get(date);
     let value: number | null = null;
     if (d) {
-      if (metric === 'hrv' || metric === 'heart_rate') value = metricValue(d.morning, metric);
+      if (isVitalTrend(metric)) value = metricValue(d.morning, metric);
       else {
         const s = computeDailyScores(d.morning, d.evening, baselineAsOf(records, date, timeZone));
         value = s[metric]?.value ?? null;
@@ -425,7 +431,7 @@ export function computeTrend(
   const half = Math.floor(n / 2);
   const baseline = computeBaseline(records, now, timeZone);
   let usualRange: TrendSeries['usualRange'] = null;
-  if (metric === 'hrv' || metric === 'heart_rate') {
+  if (isVitalTrend(metric)) {
     const b = baseline.metrics.find((m) => m.metric === metric);
     if (b?.status === 'ready') usualRange = { lower: b.lower!, upper: b.upper! };
   }
