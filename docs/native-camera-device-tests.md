@@ -76,6 +76,7 @@ time since the previous frame and the mean skin colour (`dt_ms,r×100,g×100,b×
 It holds no images and is only shared when the tester taps the button.
 
 How to read the summary lines:
+
 - **Green only** is the pulse search on the raw green channel, without POS.
   If it finds the same rate as the POS peak with a reasonable SNR, the colour
   path works and the problem is in the projection; if neither finds a pulse,
