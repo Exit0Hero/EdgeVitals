@@ -36,6 +36,7 @@ export function T({
   numberOfLines?: number;
   testID?: string;
   maxFontSizeMultiplier?: number;
+  selectable?: boolean;
 }) {
   return (
     <Text style={[type[variant], { color }, style]} maxFontSizeMultiplier={1.6} {...rest}>
