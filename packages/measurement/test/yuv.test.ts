@@ -4,6 +4,7 @@ import {
   extractRoiYuv,
   inferPixelStride,
   orientationToRotation,
+  smoothFaceBox,
   uprightToBuffer,
   type Rotation,
   type YuvFrame,
@@ -132,5 +133,19 @@ describe('YUV ROI extraction', () => {
     // Android U plane of an interleaved VU buffer: 320 px row, 160 samples spaced 2 bytes, last row short by one byte.
     expect(inferPixelStride(320 * 119 + 319, 320, 120, 160)).toBe(2);
     expect(inferPixelStride(160 * 120, 160, 120, 160)).toBe(1);
+  });
+
+  it('smooths face-box jitter but follows real moves', () => {
+    let box = { x: 100, y: 100, width: 200, height: 200 };
+    let maxDev = 0;
+    for (let i = 0; i < 60; i++) {
+      const j = i % 2 ? 3 : -3;
+      box = smoothFaceBox(box, { x: 100 + j, y: 100 - j, width: 200, height: 200 });
+      maxDev = Math.max(maxDev, Math.abs(box.x - 100));
+    }
+    expect(maxDev).toBeLessThan(1);
+    const moved = smoothFaceBox(box, { x: 180, y: 100, width: 200, height: 200 });
+    expect(moved.x).toBe(180);
+    expect(smoothFaceBox(null, box)).toEqual(box);
   });
 });
