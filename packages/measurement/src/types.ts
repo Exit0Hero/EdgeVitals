@@ -120,6 +120,30 @@ export interface SignalDiagnostics {
   hrSnrDb: number | null;
   ibiCount: number;
   ibiAcceptedFraction: number | null;
+  /** Capture statistics for troubleshooting a failed scan (aggregates only, no pixels). */
+  capture?: CaptureDiagnostics;
+  /** Heart-rate gate inputs, present when a spectral peak was found. */
+  hrGate?: HrGateDiagnostics;
+}
+
+export interface CaptureDiagnostics {
+  frameCount: number;
+  /** Median interval between frames, ms (≈ 1000 / frame rate). */
+  medianFrameIntervalMs: number;
+  /** Frames carrying each quality flag. */
+  flagCounts: Partial<Record<FrameQualityFlag, number>>;
+  /** Frames that had ROI colour statistics. */
+  roiFrames: number;
+  meanLuma: number | null;
+  meanSkinPixels: number | null;
+}
+
+export interface HrGateDiagnostics {
+  bpm: number;
+  snrDb: number;
+  halvesDiffBpm: number;
+  beatAcceptedFraction: number | null;
+  beatMeanHrBpm: number | null;
 }
 
 export type SessionOutcome = 'completed' | 'partial' | 'failed' | 'cancelled';

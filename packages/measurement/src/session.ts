@@ -64,7 +64,18 @@ export class ScanSession {
   pushFrame(input: FrameInput): FrameSample {
     if (this.done) throw new Error('ScanSession already finished');
     if (this.startT === null) this.startT = input.t;
-    const prev = [...this.frames].reverse().find((f) => f.face);
+    // Motion baseline: the latest face seen at least motionBaselineSec earlier.
+    const baselineT = input.t - PIPELINE_CONFIG.frame.motionBaselineSec * 1000;
+    let prev: FrameSample | undefined;
+    for (let i = this.frames.length - 1; i >= 0; i--) {
+      const f = this.frames[i]!;
+      if (f.t > baselineT) continue;
+      if (input.t - f.t >= 1000) break;
+      if (f.face) {
+        prev = f;
+        break;
+      }
+    }
     const flags = assessFrame({
       ...input,
       previous: prev?.face ? { t: prev.t, face: prev.face } : null,

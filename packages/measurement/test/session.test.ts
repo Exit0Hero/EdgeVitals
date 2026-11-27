@@ -52,4 +52,41 @@ describe('ScanSession', () => {
       s.pushFrame({ t: 0, faces: [], roi: null, frameWidth: 1, frameHeight: 1 }),
     ).toThrow();
   });
+
+  it('does not treat face-detector box jitter at 30 fps as motion', () => {
+    const truth = syntheticSession({ durationSec: 46, noise: 0.03, seed: 5 });
+    const s = new ScanSession(45, 90);
+    let i = 0;
+    for (const f of truth.frames) {
+      // ±3 px alternating jitter on a ~250 px face, like ML Kit's fast mode.
+      const j = i++ % 2 ? 3 : -3;
+      const face = { ...f.face!, x: f.face!.x + j, y: f.face!.y - j };
+      const sample = s.pushFrame({
+        t: f.t,
+        faces: [face],
+        roi: f.roi,
+        frameWidth: 640,
+        frameHeight: 640,
+      });
+      expect(sample.flags).not.toContain('motion_too_high');
+    }
+    expect(s.finish().outcome).toBe('completed');
+  });
+
+  it('bridges isolated missed detections instead of restarting the clean segment', () => {
+    const truth = syntheticSession({ durationSec: 46, noise: 0.03, seed: 6 });
+    const s = new ScanSession(45, 90);
+    let i = 0;
+    for (const f of truth.frames) {
+      const missed = i++ % 25 === 0; // one missed face roughly every 0.8 s
+      s.pushFrame({
+        t: f.t,
+        faces: missed ? [] : [f.face!],
+        roi: missed ? null : f.roi,
+        frameWidth: 640,
+        frameHeight: 640,
+      });
+    }
+    expect(s.liveState().usableSec).toBeGreaterThan(44);
+  });
 });
