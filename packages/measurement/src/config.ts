@@ -8,7 +8,7 @@
  * whenever a value changes so every stored measurement is traceable.
  */
 export const PIPELINE_VERSION = '0.1.0';
-export const CONFIG_VERSION = 'v0-engineering-defaults';
+export const CONFIG_VERSION = 'v0.1-engineering-defaults';
 export const ALGORITHM_NAME = 'pos-welch';
 
 export const PIPELINE_CONFIG = {
@@ -68,6 +68,12 @@ export const PIPELINE_CONFIG = {
     maxFaceWidthFraction: 0.85,
     /** Face-centre speed, in face widths per second, above which motion is too high. */
     maxFaceSpeed: 0.35,
+    /**
+     * Speed is measured against the face position at least this long ago.
+     * Frame-to-frame differences at 30 fps mostly measure face-detector box
+     * jitter (a few pixels), not head movement.
+     */
+    motionBaselineSec: 0.3,
   },
 } as const;
 

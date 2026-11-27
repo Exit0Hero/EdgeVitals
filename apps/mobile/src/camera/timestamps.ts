@@ -4,9 +4,12 @@
  * milliseconds, so the unit is inferred from the first frame interval: real
  * cameras run at 5-120 fps, i.e. 8-200 ms between frames.
  */
-export function createTimestampNormalizer() {
+export function createTimestampNormalizer(knownScale?: number) {
   let first: number | null = null;
-  let scale: number | null = null;
+  // VisionCamera reports nanoseconds on Android (CameraX) and seconds on iOS.
+  // When the unit is known it is used directly: inferring it from a single
+  // interval fails if the first two frames arrive back to back.
+  let scale: number | null = knownScale ?? null;
   return (raw: number): number | null => {
     if (first === null) {
       first = raw;

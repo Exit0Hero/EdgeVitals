@@ -3,6 +3,7 @@ import { mean, median, resampleUniform } from './dsp';
 import { estimateBreathing, estimateHeartRate, estimateHrv } from './estimators';
 import { pos } from './pos';
 import type {
+  CaptureDiagnostics,
   FrameSample,
   MetricId,
   MetricProvenance,
@@ -64,16 +65,18 @@ function valid(
   };
 }
 
-/** Longest run of usable frames with no gap above `maxGapSec`. */
+/**
+ * Longest run of usable frames in which consecutive usable frames are never
+ * more than `maxGapSec` apart. An isolated unusable frame (a missed face
+ * detection, one dark frame) is skipped and bridged by resampling, as long as
+ * the gap it leaves stays within `maxGapSec`; longer interruptions split the
+ * signal.
+ */
 export function longestUsableSegment(frames: FrameSample[]): FrameSample[] {
   let best: FrameSample[] = [];
   let cur: FrameSample[] = [];
   for (const f of frames) {
-    if (!f.usable || !f.roi) {
-      if (cur.length > best.length) best = cur;
-      cur = [];
-      continue;
-    }
+    if (!f.usable || !f.roi) continue;
     const last = cur[cur.length - 1];
     if (last && (f.t - last.t) / 1000 > cfg.maxGapSec) {
       if (cur.length > best.length) best = cur;
@@ -103,6 +106,30 @@ export function computeDiagnostics(frames: FrameSample[], seg: FrameSample[]): S
     hrSnrDb: null,
     ibiCount: 0,
     ibiAcceptedFraction: null,
+    capture: captureDiagnostics(frames, md),
+  };
+}
+
+function captureDiagnostics(frames: FrameSample[], medianIntervalMs: number): CaptureDiagnostics {
+  const flagCounts: CaptureDiagnostics['flagCounts'] = {};
+  let roiFrames = 0;
+  let luma = 0;
+  let skin = 0;
+  for (const f of frames) {
+    for (const fl of f.flags) flagCounts[fl] = (flagCounts[fl] ?? 0) + 1;
+    if (f.roi) {
+      roiFrames++;
+      luma += f.roi.luma;
+      skin += f.roi.skinPixels;
+    }
+  }
+  return {
+    frameCount: frames.length,
+    medianFrameIntervalMs: round(medianIntervalMs, 1),
+    flagCounts,
+    roiFrames,
+    meanLuma: roiFrames ? round(luma / roiFrames, 1) : null,
+    meanSkinPixels: roiFrames ? Math.round(skin / roiFrames) : null,
   };
 }
 
@@ -169,6 +196,15 @@ export function analyzeSession(
       !!beats &&
       beats.acceptedFraction >= cfg.minHrBeatAcceptedFraction &&
       Math.abs(beats.meanHrBpm - hr.bpm) <= cfg.hrvHrAgreementBpm;
+    if (hr) {
+      diagnostics.hrGate = {
+        bpm: round(hr.bpm, 1),
+        snrDb: round(hr.snrDb, 2),
+        halvesDiffBpm: Number.isFinite(hr.halvesDiffBpm) ? round(hr.halvesDiffBpm, 1) : -1,
+        beatAcceptedFraction: beats ? round(beats.acceptedFraction, 3) : null,
+        beatMeanHrBpm: beats ? round(beats.meanHrBpm, 1) : null,
+      };
+    }
     diagnostics.ibiCount = beats?.ibiCount ?? 0;
     diagnostics.ibiAcceptedFraction = beats ? round(beats.acceptedFraction, 3) : null;
     if (!hr || !hrOk) {
