@@ -24,6 +24,12 @@ export const colors = {
   scanSurface: '#262C34',
   scanText: '#FFFFFF',
   scanMuted: '#B4BAC2',
+  /** Accents on the dark scan background (each ≥4.5:1 on scanBackground). */
+  scanAccent: '#7FA6FF',
+  scanOk: '#6BD6A0',
+  scanWarn: '#F5C38B',
+  scanTrack: '#343C47',
+  scanPulse: '#FF7A7A',
   white: '#FFFFFF',
 } as const;
 

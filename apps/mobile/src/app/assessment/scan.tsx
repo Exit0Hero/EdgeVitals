@@ -1,12 +1,26 @@
 import { ScanSession, type LiveScanState } from '@edgevitals/measurement';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Linking, Platform, Pressable, View } from 'react-native';
+import { AppState, Linking, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError } from '../../api/client';
 import { CameraScanner } from '../../camera/CameraScanner';
 import type { CameraProcessingMode, CameraStatus } from '../../camera/types';
-import { Icon } from '../../components/Icon';
+import type { IconName } from '../../components/Icon';
+import {
+  CameraProblem,
+  FaceGuide,
+  MetricTile,
+  ProgressRing,
+  QualityStatus,
+  ScanNotice,
+  ScanSheet,
+  ScanTopBar,
+  SheetHeader,
+  SignalMeter,
+  SignalProgress,
+  type ScanTone,
+} from '../../components/scan';
 import { PrimaryButton, T, TextButton } from '../../components/ui';
 import { deviceTimeZone, uuid } from '../../lib/id';
 import { toSubmission } from '../../lib/measurements';
@@ -16,18 +30,21 @@ import { rememberScan } from '../../state/lastScan';
 import { getExposureLock } from '../../camera/captureNotes';
 import { getExperimentalSpo2 } from '../../lib/experimental';
 import { useFlow } from '../../state/flow';
-import { colors, radius, space } from '../../theme/tokens';
+import { colors, space } from '../../theme/tokens';
 
-const PREVIEW = 236;
+const PREVIEW = 232;
 
 type Phase = 'camera' | 'scanning' | 'submitting' | 'interrupted';
 
-const TILE_LABEL: Record<string, string> = {
-  heart_rate: 'Heart rate',
-  breathing_rate: 'Breathing',
-  hrv: 'HRV',
-  spo2: 'SpO₂',
-  blood_pressure: 'Blood pressure',
+const TILE: Record<
+  'heart_rate' | 'breathing_rate' | 'hrv' | 'spo2' | 'blood_pressure',
+  { label: string; unit: string; icon: IconName }
+> = {
+  heart_rate: { label: 'Heart rate', unit: 'bpm', icon: 'heart' },
+  breathing_rate: { label: 'Breathing', unit: 'breaths/min', icon: 'wind' },
+  hrv: { label: 'HRV', unit: 'ms', icon: 'pulse' },
+  spo2: { label: 'SpO₂', unit: '%', icon: 'drop' },
+  blood_pressure: { label: 'Blood pressure', unit: 'mmHg', icon: 'chart' },
 };
 
 /** PDF page 8 — Active scan. Every status shown here comes from a real check (FR-043, doc 02 p8). */
@@ -36,13 +53,6 @@ const TILE_LABEL: Record<string, string> = {
  * to track down the Android camera crash. That crash is fixed, so they are
  * hidden unless a build sets EXPO_PUBLIC_CAMERA_DIAGNOSTICS=1.
  */
-/** Live pulse-signal strength, shown once 15 s of clean signal exists. Gate: SNR >= -2 dB. */
-function pulseSignalText(snrDb: number | null): string {
-  if (snrDb === null) return '';
-  const label = snrDb >= 3 ? 'strong' : snrDb >= -2 ? 'fair' : 'weak';
-  return ` • pulse signal ${label} (${snrDb.toFixed(1)} dB)`;
-}
-
 const CAMERA_DIAGNOSTICS = process.env.EXPO_PUBLIC_CAMERA_DIAGNOSTICS === '1';
 
 export default function Scan() {
@@ -303,6 +313,7 @@ export default function Scan() {
 
   const blocked = camStatus === 'denied' || camStatus === 'unavailable' || camStatus === 'error';
   const q = live?.quality;
+  const tone: ScanTone = !live || q === 'starting' ? 'idle' : q === 'ready' ? 'ok' : 'warn';
   const statusText =
     camStatus === 'requesting'
       ? 'Waiting for camera permission…'
@@ -323,36 +334,17 @@ export default function Scan() {
   const framesReceived = session.current?.frameCount ?? 0;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.scanBackground }} testID="screen-scan">
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: space[5],
-          minHeight: 48,
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => submit(true)}
-          hitSlop={10}
-          testID="cancel-scan"
-          style={{ minWidth: 64, minHeight: 44, justifyContent: 'center' }}
-        >
-          <T variant="body" color={colors.scanText} style={{ fontWeight: '500' }}>
-            Cancel
-          </T>
-        </Pressable>
-        <T
-          variant="label"
-          color={colors.scanText}
-          style={{ flex: 1, textAlign: 'center' }}
-          accessibilityRole="header"
-        >
-          {blocked ? 'Camera' : headline}
-        </T>
-        <View style={{ minWidth: 64 }} />
-      </View>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: colors.scanBackground }}
+      edges={['top']}
+      testID="screen-scan"
+    >
+      <ScanTopBar
+        eyebrow="Face scan"
+        title={blocked ? 'Camera' : headline}
+        onCancel={() => submit(true)}
+        cancelTestID="cancel-scan"
+      />
 
       {blocked ? (
         <CameraBlocked
@@ -363,15 +355,11 @@ export default function Scan() {
         />
       ) : (
         <>
-          <View style={{ alignItems: 'center', marginTop: space[8] }}>
-            <View
-              style={{
-                padding: 6,
-                borderRadius: PREVIEW,
-                borderWidth: 3,
-                borderColor: q === 'ready' ? colors.primary : '#5B6573',
-              }}
-            >
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ alignItems: 'center', paddingTop: space[4], gap: space[4] }}
+          >
+            <ProgressRing size={PREVIEW} progress={live?.progress ?? 0} tone={tone}>
               <CameraScanner
                 key={`${diagnosticMode}-${cameraAttempt}`}
                 active={phase === 'camera' || phase === 'scanning'}
@@ -381,135 +369,96 @@ export default function Scan() {
                 onStatus={onStatus}
                 size={PREVIEW}
               />
-            </View>
-            <LiveStatus text={statusText} ok={q === 'ready'} />
+              <FaceGuide size={PREVIEW} tone={tone} />
+            </ProgressRing>
+            <QualityStatus text={statusText} tone={tone} testID="quality-status" />
             {error ? (
-              <View style={{ paddingHorizontal: space[6], alignItems: 'center', gap: space[3] }}>
-                <T variant="body" color="#F5C38B" style={{ textAlign: 'center' }}>
-                  {error}
-                </T>
+              <ScanNotice message={error}>
                 <PrimaryButton label="Start again" onPress={restart} testID="restart-scan" />
-              </View>
+              </ScanNotice>
             ) : null}
-          </View>
+          </ScrollView>
 
-          <View style={{ flex: 1 }} />
-          <View
-            style={{
-              backgroundColor: colors.white,
-              borderRadius: radius.card,
-              margin: space[4],
-              padding: space[4],
-            }}
-            testID="scan-card"
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <T variant="heading" style={{ fontSize: 17 }}>
-                {previewOnly
+          <ScanSheet testID="scan-card">
+            <SheetHeader
+              title={
+                previewOnly
                   ? 'Camera preview — measurement paused'
                   : phase === 'submitting'
                     ? 'Analysing…'
-                    : 'Measuring 3 of 5 vital signs'}
-              </T>
-              <T variant="small" color={colors.muted} testID="scan-elapsed">
-                {live
-                  ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
-                  : '0:00'}
-              </T>
+                    : 'Measuring 3 of 5 vital signs'
+              }
+              subtitle={previewOnly ? undefined : 'Heart rate, breathing and HRV'}
+              elapsedSec={elapsed}
+              elapsedTestID="scan-elapsed"
+            />
+            <SignalProgress
+              progress={live?.progress ?? 0}
+              usableSec={!previewOnly && phase === 'scanning' ? (live?.usableSec ?? 0) : null}
+              targetSec={live?.extended ? 75 : 45}
+              fillTestID="scan-progress"
+            />
+            <View style={{ flexDirection: 'row', gap: space[2] }}>
+              {(['heart_rate', 'breathing_rate', 'hrv'] as const).map((m) => {
+                const st = live?.metrics[m] ?? 'pending';
+                const interim =
+                  m === 'heart_rate'
+                    ? live?.interimHeartRate
+                    : m === 'hrv'
+                      ? live?.interimHrv
+                      : live?.interimBreathingRate;
+                return (
+                  <MetricTile
+                    key={m}
+                    icon={TILE[m].icon}
+                    label={TILE[m].label}
+                    value={interim}
+                    unit={TILE[m].unit}
+                    state={
+                      st === 'unavailable'
+                        ? 'no_reading'
+                        : st === 'measuring'
+                          ? 'measuring'
+                          : 'waiting'
+                    }
+                    testID={`scan-metric-${m}`}
+                  />
+                );
+              })}
             </View>
-            <View
-              accessible
-              accessibilityRole="progressbar"
-              accessibilityLabel="Clean signal captured"
-              accessibilityValue={{
-                min: 0,
-                max: 100,
-                now: Math.round((live?.progress ?? 0) * 100),
-              }}
-              style={{
-                height: 6,
-                backgroundColor: colors.surface,
-                borderRadius: 3,
-                marginVertical: space[3],
-                overflow: 'hidden',
-              }}
-            >
-              <View
-                style={{
-                  width: `${(live?.progress ?? 0) * 100}%`,
-                  height: 6,
-                  backgroundColor: colors.primary,
-                }}
-                testID="scan-progress"
-              />
-            </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2] }}>
-              {(['heart_rate', 'breathing_rate', 'hrv', 'spo2', 'blood_pressure'] as const).map(
-                (m) => {
-                  const st =
-                    live?.metrics[m] ??
-                    (m === 'spo2' || m === 'blood_pressure' ? 'unavailable' : 'pending');
-                  const interim =
-                    m === 'heart_rate'
-                      ? live?.interimHeartRate
-                      : m === 'hrv'
-                        ? live?.interimHrv
-                        : m === 'breathing_rate'
-                          ? live?.interimBreathingRate
-                          : null;
-                  const value =
-                    interim == null
-                      ? null
-                      : `${interim} ${m === 'heart_rate' ? 'bpm' : m === 'hrv' ? 'ms' : 'breaths/min'}`;
-                  return (
-                    <View
-                      key={m}
-                      style={{
-                        flexBasis: m === 'blood_pressure' ? '100%' : '48%',
-                        flexGrow: 1,
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        backgroundColor: colors.surface,
-                        borderRadius: radius.small,
-                        paddingHorizontal: space[3],
-                        paddingVertical: 10,
-                      }}
-                      testID={`scan-metric-${m}`}
-                    >
-                      <T variant="small" color={colors.textSecondary}>
-                        {TILE_LABEL[m]}
-                      </T>
-                      <T
-                        variant="small"
-                        style={{ fontWeight: value ? '700' : '400' }}
-                        color={value ? colors.text : colors.muted}
-                      >
-                        {value ??
-                          (st === 'unavailable'
-                            ? m === 'blood_pressure' || m === 'spo2'
-                              ? 'Not supported yet'
-                              : 'No reliable reading'
-                            : st === 'measuring'
-                              ? 'measuring…'
-                              : 'waiting…')}
-                      </T>
-                    </View>
-                  );
-                },
-              )}
+            <View style={{ flexDirection: 'row', gap: space[2] }}>
+              {(['spo2', 'blood_pressure'] as const).map((m) => {
+                const st = live?.metrics[m] ?? 'unavailable';
+                const interim = null;
+                return (
+                  <MetricTile
+                    key={m}
+                    compact={st === 'unavailable'}
+                    icon={TILE[m].icon}
+                    label={TILE[m].label}
+                    value={interim}
+                    unit={TILE[m].unit}
+                    state={
+                      st === 'unavailable'
+                        ? 'unsupported'
+                        : st === 'measuring'
+                          ? 'measuring'
+                          : 'waiting'
+                    }
+                    testID={`scan-metric-${m}`}
+                  />
+                );
+              })}
             </View>
             {!previewOnly && phase === 'scanning' ? (
-              <T variant="small" color={colors.muted}>
-                {framesReceived === 0
-                  ? 'Waiting for processed frames. No measurements received yet.'
-                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (${live?.extended ? 'pulse is weak, scanning up to 75 seconds' : '45 seconds needed'})${pulseSignalText(live?.interimSnrDb ?? null)}`}
-              </T>
+              <View style={{ gap: space[1] }}>
+                <SignalMeter snrDb={live?.interimSnrDb ?? null} />
+                <T variant="small" color={colors.muted}>
+                  {framesReceived === 0
+                    ? 'Waiting for processed frames. No measurements received yet.'
+                    : `${framesReceived} frames processed${live?.extended ? ' · pulse is weak, scanning up to 75 seconds' : ''}`}
+                </T>
+              </View>
             ) : null}
             {diagnosticMode === 'preview' ? (
               <PrimaryButton
@@ -545,7 +494,7 @@ export default function Scan() {
                 testID="demo-results"
               />
             ) : null}
-          </View>
+          </ScanSheet>
         </>
       )}
     </SafeAreaView>
@@ -565,19 +514,15 @@ function CameraBlocked({
 }) {
   const denied = status === 'denied';
   return (
-    <View
-      style={{ flex: 1, padding: space[6], justifyContent: 'center', gap: space[4] }}
+    <CameraProblem
       testID={`camera-${status}`}
-    >
-      <Icon name="camera" color={colors.scanText} size={36} />
-      <T variant="title" color={colors.scanText}>
-        {denied ? 'Camera access is off' : "We can't use the camera"}
-      </T>
-      <T variant="body" color={colors.scanMuted}>
-        {denied
+      title={denied ? 'Camera access is off' : "We can't use the camera"}
+      body={
+        denied
           ? 'EdgeVitals needs the front camera to scan. Allow camera access in your settings, then try again. Your history and settings are still available.'
-          : (detail ?? 'No camera is available on this device.')}
-      </T>
+          : (detail ?? 'No camera is available on this device.')
+      }
+    >
       {denied && Platform.OS !== 'web' ? (
         <PrimaryButton label="Open settings" onPress={() => Linking.openSettings()} />
       ) : null}
@@ -594,35 +539,6 @@ function CameraBlocked({
         color={colors.scanText}
         onPress={() => router.dismissTo('/today')}
       />
-    </View>
-  );
-}
-
-/**
- * Framing guidance, announced to screen readers when it changes: a live
- * region on Android and web, an explicit announcement on iOS (no live regions).
- */
-function LiveStatus({ text, ok }: { text: string; ok: boolean }) {
-  const last = useRef('');
-  useEffect(() => {
-    if (Platform.OS !== 'ios' || !text || text === last.current) return;
-    last.current = text;
-    AccessibilityInfo.announceForAccessibility(text);
-  }, [text]);
-  return (
-    <View
-      accessibilityLiveRegion="polite"
-      aria-live="polite"
-      style={{ marginTop: space[5], minHeight: 44, paddingHorizontal: space[6] }}
-    >
-      <T
-        variant="body"
-        color={ok ? colors.scanText : '#F5C38B'}
-        style={{ textAlign: 'center' }}
-        testID="quality-status"
-      >
-        {text}
-      </T>
-    </View>
+    </CameraProblem>
   );
 }

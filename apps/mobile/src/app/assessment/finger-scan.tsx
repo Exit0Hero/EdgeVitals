@@ -2,13 +2,13 @@ import { FingerScanSession, type FingerLiveState } from '@edgevitals/measurement
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   AppState,
   Linking,
   Platform,
-  Pressable,
+  ScrollView,
   Share,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError } from '../../api/client';
@@ -18,21 +18,32 @@ import { StartLog, startProblem } from '../../camera/fingerStart';
 import type { CameraStatus } from '../../camera/types';
 import { Icon } from '../../components/Icon';
 import { PulseWave } from '../../components/PulseWave';
+import {
+  CameraProblem,
+  MetricTile,
+  ProgressRing,
+  QualityStatus,
+  ScanNotice,
+  ScanSheet,
+  ScanTopBar,
+  SheetHeader,
+  SignalProgress,
+  type ScanTone,
+} from '../../components/scan';
 import { PrimaryButton, T, TextButton } from '../../components/ui';
 import { toSubmission } from '../../lib/measurements';
 import { rememberScan } from '../../state/lastScan';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
 
-const PREVIEW = 120;
-const WAVE_W = 300;
+const PREVIEW = 132;
 
 type Phase = 'camera' | 'scanning' | 'submitting' | 'interrupted';
 
 const TILES = [
-  ['heart_rate', 'Heart rate', 'bpm'],
-  ['hrv', 'HRV', 'ms'],
-  ['breathing_rate', 'Breathing', 'breaths/min'],
+  ['heart_rate', 'Heart rate', 'bpm', 'heart'],
+  ['hrv', 'HRV', 'ms', 'pulse'],
+  ['breathing_rate', 'Breathing', 'breaths/min', 'wind'],
 ] as const;
 
 /**
@@ -49,6 +60,7 @@ export default function FingerScan() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [waveW, setWaveW] = useState(0);
   const finishing = useRef(false);
   // Start-up log, shared from the error screen or the scan card.
   const log = useRef(new StartLog());
@@ -223,6 +235,7 @@ export default function FingerScan() {
   const blocked = camStatus === 'denied' || camStatus === 'unavailable' || camStatus === 'error';
   const q = live?.quality;
   const ok = q === 'ready';
+  const tone: ScanTone = !live || q === 'starting' ? 'idle' : ok ? 'ok' : 'warn';
   const elapsed = live ? Math.floor(live.elapsedSec) : 0;
   const statusText =
     camStatus === 'requesting'
@@ -236,80 +249,50 @@ export default function FingerScan() {
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: colors.scanBackground }}
+      edges={['top']}
       testID="screen-finger-scan"
     >
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: space[5],
-          minHeight: 48,
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => submit(true)}
-          hitSlop={10}
-          testID="cancel-finger-scan"
-          style={{ minWidth: 64, minHeight: 44, justifyContent: 'center' }}
-        >
-          <T variant="body" color={colors.scanText} style={{ fontWeight: '500' }}>
-            Cancel
-          </T>
-        </Pressable>
-        <T
-          variant="label"
-          color={colors.scanText}
-          style={{ flex: 1, textAlign: 'center' }}
-          accessibilityRole="header"
-        >
-          {blocked ? 'Camera' : ok ? 'Keep still' : 'Cover the camera'}
-        </T>
-        <View style={{ minWidth: 64 }} />
-      </View>
+      <ScanTopBar
+        eyebrow="Finger scan"
+        title={blocked ? 'Camera' : ok ? 'Keep still' : 'Cover the camera'}
+        onCancel={() => submit(true)}
+        cancelTestID="cancel-finger-scan"
+      />
 
       {blocked ? (
-        <View
-          style={{ flex: 1, padding: space[6], justifyContent: 'center', gap: space[4] }}
+        <CameraProblem
           testID={`finger-camera-${camStatus}`}
-        >
-          <Icon name="camera" color={colors.scanText} size={36} />
-          <T variant="title" color={colors.scanText}>
-            {camStatus === 'denied' ? 'Camera access is off' : "We can't use the finger scan"}
-          </T>
-          <T variant="body" color={colors.scanMuted}>
-            {camStatus === 'denied'
+          title={camStatus === 'denied' ? 'Camera access is off' : "We can't use the finger scan"}
+          body={
+            camStatus === 'denied'
               ? 'The finger scan needs the back camera and flash. Allow camera access in your settings, then try again.'
-              : (camDetail ?? 'No back camera with a flash is available on this device.')}
-          </T>
+              : (camDetail ?? 'No back camera with a flash is available on this device.')
+          }
+        >
           {camStatus === 'denied' && Platform.OS !== 'web' ? (
             <PrimaryButton label="Open settings" onPress={() => Linking.openSettings()} />
           ) : null}
           <PrimaryButton label="Try again" onPress={restart} />
-          <TextButton
-            label="Share start-up details"
-            color={colors.scanText}
-            onPress={shareLog}
-            testID="finger-share-log"
-          />
           <TextButton
             label="Use the face scan instead"
             color={colors.scanText}
             onPress={() => router.replace('/assessment/scan')}
             testID="finger-use-face"
           />
-        </View>
+          <TextButton
+            label="Share start-up details"
+            color={colors.scanMuted}
+            onPress={shareLog}
+            testID="finger-share-log"
+          />
+        </CameraProblem>
       ) : (
         <>
-          <View style={{ alignItems: 'center', marginTop: space[6], gap: space[4] }}>
-            <View
-              style={{
-                padding: 5,
-                borderRadius: PREVIEW,
-                borderWidth: 3,
-                borderColor: ok ? colors.primary : '#5B6573',
-              }}
-            >
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ alignItems: 'center', paddingTop: space[4], gap: space[4] }}
+          >
+            <ProgressRing size={PREVIEW} progress={live?.progress ?? 0} tone={tone}>
               <FingerCamera
                 key={attempt}
                 active={phase === 'camera' || phase === 'scanning'}
@@ -318,93 +301,69 @@ export default function FingerScan() {
                 size={PREVIEW}
                 log={log.current}
               />
-            </View>
+            </ProgressRing>
+            <QualityStatus
+              text={statusText}
+              hint={live?.hint ?? null}
+              tone={tone}
+              testID="finger-quality-status"
+            />
             <View
               style={{
-                width: WAVE_W,
-                height: 84,
-                borderRadius: radius.small,
+                alignSelf: 'stretch',
+                marginHorizontal: space[5],
+                borderRadius: radius.card,
                 backgroundColor: colors.scanSurface,
-                justifyContent: 'center',
-                alignItems: 'center',
+                padding: space[4],
+                gap: space[2],
               }}
+              onLayout={(e: LayoutChangeEvent) => setWaveW(e.nativeEvent.layout.width)}
             >
-              {live && live.waveform.length > 1 ? (
-                <PulseWave
-                  samples={live.waveform}
-                  width={WAVE_W - 16}
-                  height={72}
-                  color="#FF6B6B"
-                  testID="finger-live-wave"
-                  accessibilityLabel="Live pulse wave from your fingertip"
-                />
-              ) : (
-                <T variant="small" color={colors.scanMuted}>
-                  Your pulse wave appears here
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+                <Icon name="heart" size={16} color={colors.scanPulse} />
+                <T variant="label" color={colors.scanText} style={{ fontSize: 14 }}>
+                  Live pulse
                 </T>
-              )}
-            </View>
-            <Status text={statusText} hint={live?.hint ?? null} ok={ok} />
-            {error ? (
-              <View style={{ paddingHorizontal: space[6], alignItems: 'center', gap: space[3] }}>
-                <T variant="body" color="#F5C38B" style={{ textAlign: 'center' }}>
-                  {error}
+                <T variant="tiny" color={colors.scanMuted} style={{ marginLeft: 'auto' }}>
+                  measured from your fingertip
                 </T>
-                <PrimaryButton label="Start again" onPress={restart} />
               </View>
+              <View style={{ height: 72, justifyContent: 'center', alignItems: 'center' }}>
+                {live && live.waveform.length > 1 && waveW > 0 ? (
+                  <PulseWave
+                    samples={live.waveform}
+                    width={waveW - 2 * space[4]}
+                    height={72}
+                    color={colors.scanPulse}
+                    testID="finger-live-wave"
+                    accessibilityLabel="Live pulse wave from your fingertip"
+                  />
+                ) : (
+                  <T variant="small" color={colors.scanMuted}>
+                    Your pulse wave appears here
+                  </T>
+                )}
+              </View>
+            </View>
+            {error ? (
+              <ScanNotice message={error}>
+                <PrimaryButton label="Start again" onPress={restart} />
+              </ScanNotice>
             ) : null}
-          </View>
-          <View style={{ flex: 1 }} />
-          <View
-            style={{
-              backgroundColor: colors.white,
-              borderRadius: radius.card,
-              margin: space[4],
-              padding: space[4],
-            }}
-            testID="finger-scan-card"
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <T variant="heading" style={{ fontSize: 17 }}>
-                {phase === 'submitting' ? 'Analysing…' : 'Finger scan'}
-              </T>
-              <T variant="small" color={colors.muted}>
-                {`${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`}
-              </T>
-            </View>
-            <View
-              accessible
-              accessibilityRole="progressbar"
-              accessibilityLabel="Clean signal captured"
-              accessibilityValue={{
-                min: 0,
-                max: 100,
-                now: Math.round((live?.progress ?? 0) * 100),
-              }}
-              style={{
-                height: 6,
-                backgroundColor: colors.surface,
-                borderRadius: 3,
-                marginVertical: space[3],
-                overflow: 'hidden',
-              }}
-            >
-              <View
-                style={{
-                  width: `${(live?.progress ?? 0) * 100}%`,
-                  height: 6,
-                  backgroundColor: colors.primary,
-                }}
-              />
-            </View>
+          </ScrollView>
+          <ScanSheet testID="finger-scan-card">
+            <SheetHeader
+              title={phase === 'submitting' ? 'Analysing…' : 'Measuring 3 vital signs'}
+              subtitle="Heart rate, HRV and breathing"
+              elapsedSec={elapsed}
+            />
+            <SignalProgress
+              progress={live?.progress ?? 0}
+              usableSec={phase === 'scanning' && live ? live.usableSec : null}
+              targetSec={60}
+            />
             <View style={{ flexDirection: 'row', gap: space[2] }}>
-              {TILES.map(([m, label, unit]) => {
+              {TILES.map(([m, label, unit, icon]) => {
                 const v =
                   m === 'heart_rate'
                     ? live?.interimHeartRate
@@ -413,76 +372,35 @@ export default function FingerScan() {
                       : live?.interimBreathingRate;
                 const st = live?.metrics[m] ?? 'pending';
                 return (
-                  <View
+                  <MetricTile
                     key={m}
-                    style={{
-                      flex: 1,
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.small,
-                      paddingHorizontal: space[2],
-                      paddingVertical: 8,
-                    }}
+                    icon={icon}
+                    label={label}
+                    value={v}
+                    unit={unit}
+                    state={st === 'measuring' ? 'measuring' : 'waiting'}
                     testID={`finger-metric-${m}`}
-                  >
-                    <T variant="tiny" color={colors.textSecondary}>
-                      {label}
-                    </T>
-                    <T
-                      variant="small"
-                      style={{ fontWeight: v != null ? '700' : '400' }}
-                      color={v != null ? colors.text : colors.muted}
-                    >
-                      {v != null ? `${v} ${unit}` : st === 'measuring' ? 'measuring…' : 'waiting…'}
-                    </T>
-                  </View>
+                  />
                 );
               })}
             </View>
-            <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
-              {phase === 'scanning' && live
-                ? `${Math.floor(live.usableSec)} of 60 seconds of clean signal · stops by itself in ${live.secondsLeft} s so the flash doesn't get hot`
-                : 'About 60 seconds. The flash stays on only while scanning.'}
-            </T>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[2] }}>
+              <Icon name="flame" size={16} color={colors.subtle} />
+              <T variant="small" color={colors.muted} style={{ flex: 1 }}>
+                {phase === 'scanning' && live
+                  ? `Stops by itself in ${live.secondsLeft} s so the flash doesn't get hot.`
+                  : 'About 60 seconds. The flash stays on only while scanning.'}
+              </T>
+            </View>
             <TextButton
               label="Problems? Share start-up details"
               align="flex-start"
               onPress={shareLog}
               testID="finger-share-log-card"
             />
-          </View>
+          </ScanSheet>
         </>
       )}
     </SafeAreaView>
-  );
-}
-
-function Status({ text, hint, ok }: { text: string; hint: string | null; ok: boolean }) {
-  const last = useRef('');
-  const full = hint ? `${text} ${hint}` : text;
-  useEffect(() => {
-    if (Platform.OS !== 'ios' || !full || full === last.current) return;
-    last.current = full;
-    AccessibilityInfo.announceForAccessibility(full);
-  }, [full]);
-  return (
-    <View
-      accessibilityLiveRegion="polite"
-      aria-live="polite"
-      style={{ minHeight: 44, paddingHorizontal: space[6] }}
-    >
-      <T
-        variant="body"
-        color={ok ? colors.scanText : '#F5C38B'}
-        style={{ textAlign: 'center' }}
-        testID="finger-quality-status"
-      >
-        {text}
-      </T>
-      {hint ? (
-        <T variant="small" color="#F5C38B" style={{ textAlign: 'center', marginTop: 4 }}>
-          {hint}
-        </T>
-      ) : null}
-    </View>
   );
 }

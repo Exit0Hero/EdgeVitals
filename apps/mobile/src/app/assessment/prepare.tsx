@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
-import Svg, { Circle, Ellipse, Rect } from 'react-native-svg';
+import { Pressable, View } from 'react-native';
+import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 import { api } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
 import { Icon, type IconName } from '../../components/Icon';
-import { Loading, PrimaryButton, Screen, Segmented, T } from '../../components/ui';
+import { Loading, PrimaryButton, Screen, StatusPill, T } from '../../components/ui';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
 
@@ -45,6 +45,33 @@ const STEPS: { icon: IconName; title: string; sub: string }[] = [
   },
 ];
 
+const OPTIONS: {
+  value: ScanType;
+  icon: IconName;
+  title: string;
+  camera: string;
+  detail: string;
+  recommended?: boolean;
+}[] = [
+  {
+    value: 'finger',
+    icon: 'finger',
+    title: 'Finger scan',
+    camera: 'Back camera and flash · about 1 min',
+    detail:
+      'Uses the back camera and flash. The signal is much stronger, so it gives a reading far more often, including HRV and breathing.',
+    recommended: true,
+  },
+  {
+    value: 'face',
+    icon: 'face',
+    title: 'Face scan',
+    camera: 'Front camera · 45 to 75 s',
+    detail:
+      'Uses the front camera. The signal is weak, so it only works with the phone propped up and your head still. HRV and breathing rarely come through.',
+  },
+];
+
 /** PDF page 7 — Get ready to scan. Explains the camera before the permission prompt (FR-041). */
 export default function Prepare() {
   const { assessment: a } = useFlow();
@@ -58,86 +85,188 @@ export default function Prepare() {
     router.push(type === 'finger' ? '/assessment/finger-scan' : '/assessment/scan');
   };
   const steps = type === 'finger' ? FINGER_STEPS : STEPS;
+  const chosen = OPTIONS.find((o) => o.value === type)!;
   return (
     <Screen
       testID="screen-prepare"
       footer={
-        <PrimaryButton label="Start scan" onPress={start} loading={busy} testID="start-scan" />
+        <PrimaryButton
+          label={type === 'finger' ? 'Start finger scan' : 'Start face scan'}
+          icon="camera"
+          onPress={start}
+          loading={busy}
+          testID="start-scan"
+        />
       }
     >
       <AssessmentHeader kind={a.kind} step={1} onBack={() => router.back()} />
-      <T variant="title" accessibilityRole="header" style={{ marginBottom: space[4] }}>
+      <T variant="title" accessibilityRole="header" style={{ marginBottom: space[1] }}>
         Get ready to scan
       </T>
-      <Segmented
-        label="Scan type"
-        testID="scan-type"
-        value={type}
-        onChange={setType}
-        options={[
-          { value: 'finger', label: 'Finger scan (recommended)' },
-          { value: 'face', label: 'Face scan' },
-        ]}
-      />
-      <T
-        variant="small"
-        color={colors.muted}
-        style={{ marginTop: space[2], marginBottom: space[4] }}
-      >
-        {type === 'finger'
-          ? 'Uses the back camera and flash. The signal is much stronger, so it gives a reading far more often, including HRV and breathing.'
-          : 'Uses the front camera. The signal is weak, so it only works with the phone propped up and your head still. HRV and breathing rarely come through.'}
+      <T variant="body" color={colors.muted} style={{ marginBottom: space[5] }}>
+        Choose how to measure. You can switch next time.
       </T>
       <View
+        accessibilityRole="radiogroup"
+        accessibilityLabel="Scan type"
+        testID="scan-type"
+        style={{ gap: space[3], marginBottom: space[3] }}
+      >
+        {OPTIONS.map((o) => {
+          const selected = o.value === type;
+          return (
+            <Pressable
+              key={o.value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected, checked: selected }}
+              aria-checked={selected}
+              accessibilityLabel={`${o.title}${o.recommended ? ', recommended' : ''}. ${o.camera}`}
+              onPress={() => setType(o.value)}
+              testID={`scan-type-${o.value}`}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space[3],
+                padding: space[4],
+                borderRadius: radius.card,
+                borderWidth: selected ? 2 : 1,
+                borderColor: selected ? colors.primary : colors.border,
+                backgroundColor: selected ? colors.hero : colors.background,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.control,
+                  backgroundColor: selected ? colors.primary : colors.surface,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon
+                  name={o.icon}
+                  size={22}
+                  color={selected ? colors.white : colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
+                  <T variant="label" style={{ fontSize: 16 }}>
+                    {o.title}
+                  </T>
+                  {o.recommended ? <StatusPill label="Recommended" tone="success" /> : null}
+                </View>
+                <T variant="small" color={colors.muted}>
+                  {o.camera}
+                </T>
+              </View>
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  borderWidth: 2,
+                  borderColor: selected ? colors.primary : colors.subtle,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {selected ? (
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: colors.primary,
+                    }}
+                  />
+                ) : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <T variant="small" color={colors.muted} style={{ marginBottom: space[5] }}>
+        {chosen.detail}
+      </T>
+
+      <View
         style={{
-          backgroundColor: colors.surface,
+          backgroundColor: colors.hero,
           borderRadius: radius.card,
-          height: 190,
+          height: 180,
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: space[6],
+          marginBottom: space[5],
+          overflow: 'hidden',
         }}
         accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
       >
-        {type === 'finger' ? (
-          <Svg width={120} height={160}>
-            {/* Phone back with camera and flash, and a fingertip covering both. */}
-            <Rect
-              x={20}
-              y={6}
-              width={80}
-              height={148}
-              rx={14}
-              stroke={colors.primary}
-              strokeWidth={2.5}
-              fill="none"
-            />
-            <Circle cx={44} cy={34} r={9} stroke={colors.primary} strokeWidth={2} fill="none" />
-            <Circle cx={66} cy={34} r={4} fill={colors.primary} />
-            <Ellipse cx={55} cy={40} rx={22} ry={28} fill="#E8A598" opacity={0.75} />
-          </Svg>
-        ) : (
-          <Svg width={120} height={160}>
-            <Ellipse
-              cx={60}
-              cy={80}
-              rx={56}
-              ry={76}
-              stroke={colors.primary}
-              strokeWidth={2.5}
-              strokeDasharray="5 5"
-              fill="none"
-            />
-          </Svg>
-        )}
+        <Svg width={220} height={180} style={{ position: 'absolute' }}>
+          <Circle cx={110} cy={90} r={80} fill={colors.primarySoft} />
+          <Circle cx={110} cy={90} r={56} fill={colors.white} opacity={0.6} />
+        </Svg>
+        <View style={{ position: 'relative' }}>
+          {type === 'finger' ? (
+            <Svg width={120} height={160}>
+              {/* Phone back with camera and flash, and a fingertip resting over both. */}
+              <Rect x={24} y={8} width={72} height={144} rx={16} fill={colors.white} />
+              <Rect
+                x={24}
+                y={8}
+                width={72}
+                height={144}
+                rx={16}
+                stroke={colors.primary}
+                strokeWidth={2.5}
+                fill="none"
+              />
+              <Rect x={34} y={20} width={40} height={30} rx={9} fill={colors.surface} />
+              <Circle cx={46} cy={35} r={7} stroke={colors.primary} strokeWidth={2} fill="none" />
+              <Circle cx={63} cy={35} r={3.5} fill={colors.warning} />
+              <Path d="M36 160 L36 40 a19 19 0 0 1 38 0 L74 160" fill="#E8A598" opacity={0.8} />
+              <Path d="M46 34 q9 -6 18 0" stroke="#C97F72" strokeWidth={1.5} fill="none" />
+            </Svg>
+          ) : (
+            <Svg width={120} height={160}>
+              <Ellipse
+                cx={60}
+                cy={78}
+                rx={46}
+                ry={62}
+                stroke={colors.primary}
+                strokeWidth={2.5}
+                strokeDasharray="6 6"
+                fill="none"
+              />
+              <Ellipse cx={60} cy={78} rx={30} ry={40} fill="#E8C3B4" opacity={0.75} />
+              <Circle cx={50} cy={72} r={2.5} fill={colors.textSecondary} />
+              <Circle cx={70} cy={72} r={2.5} fill={colors.textSecondary} />
+              <Path
+                d="M52 94 q8 5 16 0"
+                stroke={colors.textSecondary}
+                strokeWidth={2}
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          )}
+        </View>
       </View>
-      {steps.map((s) => (
+
+      <T variant="heading" accessibilityRole="header" style={{ marginBottom: space[3] }}>
+        Before you start
+      </T>
+      {steps.map((s, i) => (
         <View
           key={s.title}
           style={{
             flexDirection: 'row',
             gap: space[4],
-            alignItems: 'center',
+            alignItems: 'flex-start',
             marginBottom: space[4],
           }}
         >
@@ -155,7 +284,7 @@ export default function Prepare() {
           </View>
           <View style={{ flex: 1 }}>
             <T variant="label" style={{ fontSize: 16 }}>
-              {s.title}
+              {`${i + 1}. ${s.title}`}
             </T>
             <T variant="small" color={colors.muted}>
               {s.sub}
@@ -163,11 +292,24 @@ export default function Prepare() {
           </View>
         </View>
       ))}
-      <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
-        {type === 'finger'
-          ? "We'll ask to use your back camera and turn on the flash. The flash can make the phone warm, so the scan stops by itself after about a minute. The video is processed on this device and is never stored or uploaded."
-          : "We'll ask to use your front camera. The video is processed on this device and is never stored or uploaded. The scan takes 45 to 75 seconds."}
-      </T>
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: space[3],
+          alignItems: 'flex-start',
+          backgroundColor: colors.surface,
+          borderRadius: radius.control,
+          padding: space[4],
+          marginTop: space[1],
+        }}
+      >
+        <Icon name="lock" size={18} color={colors.textSecondary} />
+        <T variant="small" color={colors.textSecondary} style={{ flex: 1 }}>
+          {type === 'finger'
+            ? "We'll ask to use your back camera and turn on the flash. The flash can make the phone warm, so the scan stops by itself after about a minute. The video is processed on this device and is never stored or uploaded."
+            : "We'll ask to use your front camera. The video is processed on this device and is never stored or uploaded. The scan takes 45 to 75 seconds."}
+        </T>
+      </View>
     </Screen>
   );
 }
