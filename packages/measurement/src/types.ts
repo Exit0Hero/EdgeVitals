@@ -93,8 +93,10 @@ export interface MetricProvenance {
    * third-party SDK (ADR 0007); only ever used for SpO2 and blood pressure.
    * camera_experimental: an opt-in, unvalidated research estimator from a
    * published method (ADR 0008); currently SpO2 only.
+   * finger_ppg: fingertip over the back camera with the torch on (ADR 0010);
+   * heart rate, HRV and breathing only.
    */
-  method: 'camera_rppg' | 'licensed_sdk' | 'camera_experimental';
+  method: 'camera_rppg' | 'licensed_sdk' | 'camera_experimental' | 'finger_ppg';
   algorithm: string;
   version: string;
   source: 'measured' | 'simulated';
@@ -133,6 +135,10 @@ export interface SignalDiagnostics {
   hrGate?: HrGateDiagnostics;
   /** Raw-signal statistics of the analysed segment, for troubleshooting. */
   signal?: SignalStatsDiagnostics;
+  /** Present only for a finger scan (ADR 0010). */
+  finger?: FingerDiagnostics;
+  /** Face scan: breathing from head movement (present once the scan is long enough). */
+  motionBreathing?: MotionBreathingDiagnostics;
   /** Present only when experimental SpO2 was requested (ADR 0008). */
   experimentalSpo2?: {
     ratio: number | null;
@@ -195,6 +201,55 @@ export interface HrConsensusDiagnostics {
   snrDb: number;
 }
 
+export interface BreathingModulation {
+  name: 'riiv' | 'riav' | 'rifv';
+  perMin: number | null;
+  /** Share of 0.05-0.7 Hz power near the peak (0-1). */
+  concentration: number;
+}
+
+export interface FingerDiagnostics {
+  /** Channel used for the pulse. */
+  channel: 'r' | 'g' | 'b' | null;
+  /** SNR of each channel's pulse, dB (null when the channel was unusable). */
+  channelSnrDb: { r: number | null; g: number | null; b: number | null };
+  /** Median beat amplitude as % of the channel mean (a camera "perfusion index"). */
+  pulseStrengthPct: number | null;
+  /** Share of frames with the red channel mostly clipped at 255. */
+  redClippedFraction: number;
+  meanCoverage: number | null;
+  halvesDiffBpm: number | null;
+  beatMeanHrBpm: number | null;
+  sdnnMs: number | null;
+  /** Estimated beat-timing error, ms. HRV abstains above maxTimingNoiseMs. */
+  timingNoiseMs: number | null;
+  breathing: BreathingModulation[];
+  /** (AC/DC red) / (AC/DC blue). Recorded only; no SpO2 is derived from it. */
+  ratioOfRatiosRedBlue: number | null;
+}
+
+export interface MotionBreathingDiagnostics {
+  perMin: number | null;
+  /** Share of 0.05-0.7 Hz power of the head-movement trace near its peak. */
+  concentration: number;
+  /** Share of 20 s windows that agree with the whole-scan rate. */
+  agreement: number;
+  windows: number;
+  /** Std of the band-passed vertical face position, % of face height. */
+  amplitudePct: number;
+  passed: boolean;
+}
+
+/** A short stretch of the pulse for display (kept on the device, never uploaded). */
+export interface PulseWaveform {
+  /** Samples per second. */
+  fs: number;
+  /** Scaled to ±1. */
+  samples: number[];
+  /** Detected beat times, seconds from the first sample. */
+  beats: number[];
+}
+
 export type SessionOutcome = 'completed' | 'partial' | 'failed' | 'cancelled';
 
 export interface SessionResult {
@@ -203,4 +258,8 @@ export interface SessionResult {
   diagnostics: SignalDiagnostics;
   pipelineVersion: string;
   configVersion: string;
+  /** Which scan produced this result. Absent means the face scan. */
+  scanType?: 'face' | 'finger';
+  /** Finger scans: the last seconds of the pulse with detected beats, for display. */
+  waveform?: PulseWaveform;
 }

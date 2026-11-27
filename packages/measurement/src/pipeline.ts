@@ -10,6 +10,7 @@ import {
 import { pos } from './pos';
 import { pbv } from './pbv';
 import { EXPERIMENTAL_SPO2, estimateExperimentalSpo2 } from './experimentalSpo2';
+import { estimateMotionBreathing } from './motionBreathing';
 import type {
   CaptureDiagnostics,
   FrameSample,
@@ -353,6 +354,24 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
         }
       }
     }
+  }
+
+  // Breathing from head movement: independent of the colour pulse, so it can
+  // pass when the pulse is too faint for the two colour-based estimators.
+  if (dur >= cfg.minBreathingDurationSec) {
+    const motion = estimateMotionBreathing(seg);
+    if (motion) diagnostics.motionBreathing = motion;
+    if (
+      motion?.passed &&
+      motion.perMin !== null &&
+      results.get('breathing_rate')?.status !== 'valid'
+    )
+      results.set(
+        'breathing_rate',
+        valid('breathing_rate', round(motion.perMin, 0), motion.concentration * motion.agreement, [
+          'head_motion',
+        ]),
+      );
   }
 
   const metrics = [...SUPPORTED_METRICS.map((m) => results.get(m)!), ...unsupported()];

@@ -21,7 +21,7 @@ Date: 2026-11-26 · Status: Accepted (product owner chose "Show as labelled esti
   - **Whole-scan spectrum**: POS SNR ≥ 3 dB **and** first/second-half HR agree within 6 bpm **and** ≥70% plausible beat intervals **and** beat-derived HR within 5 bpm of spectral HR. With the v0.2 floor of −2 dB this path accepted about 0.4% of simulated phone-like noise captures, hence 3 dB.
 - HR false acceptance (regression tests, simulated): 0 of 150 white-noise captures (15–45 s), 0 of 120 phone-like coloured-noise captures (20–90 s). Calibration runs outside the test suite: 0 of 4,000 pulseless captures across 15–90 s, and 0 of 1,500 pulseless 76 s captures checked at every interim step from 45 to 75 s (which is what the extended scan does). Weak simulated pulses (amplitude 0.08% of skin brightness, SNR about +1 dB): 95% read at 45 s, all within 2 bpm.
 - HRV: SNR ≥ 13 dB, ≥20 intervals, ≥80% accepted, RMSSD 5–200 ms. Synthetic tests showed beat-timing noise inflates RMSSD by 50–100 ms at moderate SNR, hence the strict gate.
-- Breathing: both estimators agree within 3 breaths/min.
+- Breathing: both estimators agree within 3 breaths/min. If they abstain, breathing from head movement may pass on its own gates (ADR 0010).
 
 #### Why v0.3 (real phone data, iQOO Neo 9, Android)
 

@@ -82,6 +82,13 @@ describe('measurement schema', () => {
     ).toBe(false);
     expect(measurementSchema.safeParse({ ...base, ...exp }).success).toBe(false);
   });
+  it('accepts finger-scan HR/HRV/breathing but never SpO2 or BP values', () => {
+    const f = { method: 'finger_ppg', algorithm_name: 'finger-ppg-slope' };
+    expect(measurementSchema.safeParse({ ...base, ...f }).success).toBe(true);
+    expect(
+      measurementSchema.safeParse({ ...base, metric: 'spo2', unit: '%', value: 97, ...f }).success,
+    ).toBe(false);
+  });
   it('never lets a licensed SDK report pipeline metrics', () => {
     expect(measurementSchema.safeParse({ ...base, method: 'licensed_sdk' }).success).toBe(false);
   });

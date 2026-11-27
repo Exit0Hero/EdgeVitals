@@ -20,6 +20,10 @@ export default function RootLayout() {
               name="assessment/scan"
               options={{ gestureEnabled: false, animation: 'fade' }}
             />
+            <Stack.Screen
+              name="assessment/finger-scan"
+              options={{ gestureEnabled: false, animation: 'fade' }}
+            />
           </Stack>
           <CrashNotice />
         </FlowProvider>

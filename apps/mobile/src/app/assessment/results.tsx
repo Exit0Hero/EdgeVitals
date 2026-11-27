@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { api, ApiError, type Assessment, type Dashboard } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
+import { FingerPulseCard } from '../../components/FingerPulseCard';
 import { ScanDetails } from '../../components/ScanDetails';
 import { SyncedVitals } from '../../components/SyncedVitals';
 import {
@@ -26,6 +27,12 @@ const RETRY_TIPS = [
   'Sit facing a window or lamp so light falls evenly on your face.',
   'Rest your elbows on a table so the phone stays still.',
   'Keep your whole face inside the oval and avoid talking.',
+];
+
+const FINGER_RETRY_TIPS = [
+  'Cover both the camera and the flash with the pad of your fingertip.',
+  'Rest the finger lightly. Pressing hard squeezes the blood out and flattens the pulse.',
+  'Rest your hand on a table and keep it still. Warm cold hands first.',
 ];
 
 /** PDF page 9 — Results. Only values that passed their quality gates are shown (FR-051). */
@@ -77,6 +84,8 @@ export default function Results() {
   const failed = a.status === 'failed';
   const scanResult =
     scanFor(a.id) ?? (draft?.assessmentId === a.id ? (draft.result ?? null) : null);
+  const fingerScan =
+    scanResult?.scanType === 'finger' || a.measurements.some((m) => m.method === 'finger_ppg');
   const isToday = dash.today[a.kind]?.assessment_id === a.id;
   const scores = isToday && !a.demo ? dash.scores : null;
   const rec = scores?.recovery;
@@ -155,7 +164,7 @@ export default function Results() {
           <T variant="label" style={{ marginBottom: space[2] }}>
             Nothing is wrong. The camera signal just wasn't clear enough this time.
           </T>
-          {RETRY_TIPS.map((t) => (
+          {(fingerScan ? FINGER_RETRY_TIPS : RETRY_TIPS).map((t) => (
             <T key={t} variant="small" color={colors.textSecondary} style={{ marginBottom: 4 }}>
               • {t}
             </T>
@@ -224,6 +233,7 @@ export default function Results() {
         </T>
       ) : null}
       <VitalRows vitals={vitals} />
+      {!a.demo && fingerScan && scanResult ? <FingerPulseCard result={scanResult} /> : null}
       {!a.demo ? <SyncedVitals /> : null}
       {!a.demo ? (
         <TextButton
@@ -239,8 +249,8 @@ export default function Results() {
         </View>
       ) : null}
       <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
-        Wellness information only, not for diagnosis. Heart rate, HRV and breathing are camera
-        estimates that have not been clinically validated.{' '}
+        Wellness information only, not for diagnosis. Heart rate, HRV and breathing are{' '}
+        {fingerScan ? 'finger-scan' : 'camera'} estimates that have not been clinically validated.{' '}
         {sdkVitals
           ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
           : experimentalSpo2
