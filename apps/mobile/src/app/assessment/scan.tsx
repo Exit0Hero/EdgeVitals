@@ -36,11 +36,9 @@ export default function Scan() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [error, setError] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
-  // On Android, open the previously verified safe preview first. Native frame processing
-  // is opt-in until physical-device testing proves it no longer shuts down the app.
-  const [diagnosticMode, setDiagnosticMode] = useState<CameraProcessingMode>(
-    Platform.OS === 'android' ? 'preview' : 'full',
-  );
+  // Measurements start automatically on every platform. Native frame processing was
+  // opt-in on Android until the crash fixed in PR #25 was confirmed gone on a device.
+  const [diagnosticMode, setDiagnosticMode] = useState<CameraProcessingMode>('full');
   const [diagnosticText, setDiagnosticText] = useState('');
   const lastDiagnosticUpdate = useRef(-Infinity);
   const [cameraAttempt, setCameraAttempt] = useState(0);
@@ -181,7 +179,7 @@ export default function Scan() {
     setCamStatus('idle');
     setCamDetail(undefined);
     setCameraAttempt((n) => n + 1);
-    setDiagnosticMode(Platform.OS === 'android' ? 'preview' : 'full');
+    setDiagnosticMode('full');
     setDiagnosticText('');
   };
 
