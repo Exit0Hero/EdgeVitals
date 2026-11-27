@@ -49,6 +49,8 @@ Phone test builds: **Actions → Build test app** (Expo EAS, needs the `EXPO_TOK
 
 Docker images, environment variables, migrations, hosting headers and the launch checklist: `docs/deployment.md`.
 
+What is release-ready and what still needs a decision or an account: `docs/production-readiness.md`.
+
 Staging runs on Render's free tier (`render.yaml`, Singapore): `docs/render-staging.md`.
 
 > **Ops note: PRs that add a migration.** The API never migrates on start, and `/ready` returns 503 until every migration is applied, so after merging a PR that adds a file to `apps/api/migrations/` the new staging deploy stays unhealthy. To finish it:
