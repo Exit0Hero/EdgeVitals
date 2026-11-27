@@ -176,6 +176,23 @@ export interface HrGateDiagnostics {
   halvesDiffBpm: number;
   beatAcceptedFraction: number | null;
   beatMeanHrBpm: number | null;
+  /**
+   * Window-consensus path (PBV pulse), present when the capture is long
+   * enough for it. Heart rate passes when either path passes.
+   */
+  consensus?: HrConsensusDiagnostics;
+  /** Which path accepted the heart rate, or null when neither did. */
+  acceptedBy?: 'spectral' | 'consensus' | null;
+}
+
+export interface HrConsensusDiagnostics {
+  bpm: number;
+  /** Share of windows voting for `bpm` (0-1). */
+  agreement: number;
+  /** Share needed for this capture length (0-1). */
+  required: number;
+  windows: number;
+  snrDb: number;
 }
 
 export type SessionOutcome = 'completed' | 'partial' | 'failed' | 'cancelled';
