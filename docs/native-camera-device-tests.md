@@ -53,9 +53,10 @@ The likely cause is orientation or mirroring. `CameraScanner.tsx` assumes ML Kit
    tap **Share details** and send the text. It names the camera stage that was
    running and, for JavaScript errors, the exact error. It contains no images
    or health data.
-2. Find the failing stage: on the scan screen try, one at a time, **Test camera
-   preview only**, **Test frame output**, **Test face detection**, then
-   **Start measurements**. Note the first one that closes the app.
+2. Find the failing stage: build with `EXPO_PUBLIC_CAMERA_DIAGNOSTICS=1` (the
+   stage buttons are hidden otherwise), then on the scan screen try, one at a
+   time, **Test camera preview only**, **Test frame output**, **Test face
+   detection**, then **Start measuring**. Note the first one that closes the app.
 3. For a native crash (the card says no JavaScript error was recorded), collect
    the Android log. With a computer and a USB cable:
    - Phone: Settings → About phone → tap "Software version" 7 times; then

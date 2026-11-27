@@ -30,6 +30,13 @@ const TILE_LABEL: Record<string, string> = {
 };
 
 /** PDF page 8 — Active scan. Every status shown here comes from a real check (FR-043, doc 02 p8). */
+/**
+ * Camera stage tests (preview only, frame output, face detection) were added
+ * to track down the Android camera crash. That crash is fixed, so they are
+ * hidden unless a build sets EXPO_PUBLIC_CAMERA_DIAGNOSTICS=1.
+ */
+const CAMERA_DIAGNOSTICS = process.env.EXPO_PUBLIC_CAMERA_DIAGNOSTICS === '1';
+
 export default function Scan() {
   const { assessment: a, setAssessment } = useFlow();
   const session = useRef<ScanSession | null>(null);
@@ -496,26 +503,30 @@ export default function Scan() {
             ) : null}
             {diagnosticMode === 'preview' ? (
               <PrimaryButton
-                label="Start measurements (experimental)"
+                label="Start measuring"
                 onPress={() => testStage('full')}
                 testID="start-measurements"
               />
             ) : null}
-            <TextButton
-              label="Test camera preview only (no measurements)"
-              onPress={() => testStage('preview')}
-              testID="camera-preview-test"
-            />
-            <TextButton
-              label="Test frame output (no face detection)"
-              onPress={() => testStage('frames')}
-              testID="camera-frame-test"
-            />
-            <TextButton
-              label="Test face detection (no YUV sampling)"
-              onPress={() => testStage('face')}
-              testID="camera-face-test"
-            />
+            {CAMERA_DIAGNOSTICS ? (
+              <>
+                <TextButton
+                  label="Test camera preview only (no measurements)"
+                  onPress={() => testStage('preview')}
+                  testID="camera-preview-test"
+                />
+                <TextButton
+                  label="Test frame output (no face detection)"
+                  onPress={() => testStage('frames')}
+                  testID="camera-frame-test"
+                />
+                <TextButton
+                  label="Test face detection (no YUV sampling)"
+                  onPress={() => testStage('face')}
+                  testID="camera-face-test"
+                />
+              </>
+            ) : null}
             {previewOnly ? <TextButton label="Restart camera safely" onPress={restart} /> : null}
             {demoEnabled && !previewOnly ? (
               <TextButton
@@ -561,7 +572,7 @@ function CameraBlocked({
         <PrimaryButton label="Open settings" onPress={() => Linking.openSettings()} />
       ) : null}
       <PrimaryButton label="Try again" onPress={onRetry} testID="camera-retry" />
-      {!denied ? (
+      {!denied && CAMERA_DIAGNOSTICS ? (
         <>
           <TextButton label="Test preview only" onPress={() => onTestStage('preview')} />
           <TextButton label="Test frame output" onPress={() => onTestStage('frames')} />
