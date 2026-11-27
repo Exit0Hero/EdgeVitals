@@ -17,7 +17,7 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-function gauss(rng: () => number): number {
+export function gauss(rng: () => number): number {
   const u = Math.max(1e-12, rng());
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
 }

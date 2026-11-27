@@ -508,7 +508,7 @@ export default function Scan() {
               <T variant="small" color={colors.muted}>
                 {framesReceived === 0
                   ? 'Waiting for processed frames. No measurements received yet.'
-                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (45 seconds needed)${pulseSignalText(live?.interimSnrDb ?? null)}`}
+                  : `${framesReceived} frames processed • ${Math.floor(live?.usableSec ?? 0)} seconds of usable signal (${live?.extended ? 'pulse is weak, scanning up to 75 seconds' : '45 seconds needed'})${pulseSignalText(live?.interimSnrDb ?? null)}`}
               </T>
             ) : null}
             {diagnosticMode === 'preview' ? (

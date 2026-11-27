@@ -41,10 +41,19 @@ export function describeScan(r: SessionResult): string[] {
   const g = d.hrGate;
   if (g) {
     lines.push(
-      `Pulse peak: ${g.bpm} bpm · SNR ${g.snrDb} dB (needs ≥ -2) · halves differ ${g.halvesDiffBpm < 0 ? 'n/a' : `${g.halvesDiffBpm} bpm`} (needs ≤ 6)`,
+      `Pulse peak: ${g.bpm} bpm · SNR ${g.snrDb} dB (needs ≥ 3) · halves differ ${g.halvesDiffBpm < 0 ? 'n/a' : `${g.halvesDiffBpm} bpm`} (needs ≤ 6)`,
     );
     lines.push(
       `Beats accepted: ${g.beatAcceptedFraction === null ? '—' : `${Math.round(g.beatAcceptedFraction * 100)}%`} (needs ≥ 70%) · beat HR ${g.beatMeanHrBpm ?? '—'} bpm`,
+    );
+    const c = g.consensus;
+    lines.push(
+      c
+        ? `Window check: ${Math.round(c.agreement * c.windows)} of ${c.windows} windows agree on ${c.bpm} bpm (${Math.round(c.agreement * 100)}%, needs ≥ ${Math.round(c.required * 100)}%) · SNR ${c.snrDb} dB (needs ≥ -2)`
+        : 'Window check: needs about 40 s of clean signal',
+    );
+    lines.push(
+      `Heart rate passed by: ${g.acceptedBy === 'consensus' ? 'window check' : g.acceptedBy === 'spectral' ? 'whole-scan peak' : 'neither check'}`,
     );
   }
   const s = d.signal;

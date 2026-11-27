@@ -8,7 +8,7 @@
  * whenever a value changes so every stored measurement is traceable.
  */
 export const PIPELINE_VERSION = '0.1.0';
-export const CONFIG_VERSION = 'v0.2-engineering-defaults';
+export const CONFIG_VERSION = 'v0.3-window-consensus';
 export const ALGORITHM_NAME = 'pos-welch';
 
 export const PIPELINE_CONFIG = {
@@ -16,6 +16,8 @@ export const PIPELINE_CONFIG = {
   sampleRateHz: 30,
   /** Target capture length of usable signal. */
   targetUsableSec: 45,
+  /** If heart rate has not passed by targetUsableSec, keep scanning up to this. */
+  extendedUsableSec: 75,
   /** Hard stop for a scan, usable or not. */
   maxScanSec: 90,
   /** A gap longer than this between usable frames breaks the signal segment. */
@@ -32,14 +34,39 @@ export const PIPELINE_CONFIG = {
   hrBandHz: [0.7, 3.0] as [number, number],
   minHrDurationSec: 15,
   /**
-   * Heart-rate acceptance requires ALL of: SNR >= minHrSnrDb, first/second
-   * half spectral HR within hrHalvesAgreementBpm, at least
-   * minHrBeatAcceptedFraction of detected beat intervals plausible, and
-   * beat-derived HR within hrvHrAgreementBpm of spectral HR. On 300
-   * synthetic noise-only captures (15-45 s) this combination accepted 0;
-   * see test/gates.test.ts. Real-world false-acceptance is NOT yet measured.
+   * Window-consensus heart rate (consensusHeartRate), the path for weak
+   * but real pulses: PBV pulse (de Haan & van Leest 2014, window
+   * hrPbvWindowSec); 10 s windows every 2 s each vote with their strongest
+   * peak; the capture passes when the share of votes within ±6 bpm of the
+   * consensus reaches hrConsensusBase + hrConsensusPerWindow / windows
+   * (0.83 at 45 s, 0.74 at 60 s, 0.70 at 75 s), with at least
+   * hrConsensusMinWindows windows (about 40 s) and SNR at the consensus
+   * rate >= minHrSnrDb. Simulated pulseless captures (white and phone-like
+   * coloured noise, 500 per length) reached at most 0.67 at 45 s and 0.72
+   * at 60 s; trace 3 from the iQOO Neo 9 (locked exposure) reaches 0.89.
+   */
+  hrPbvWindowSec: 9.6,
+  hrConsensusWindowSec: 10,
+  hrConsensusHopSec: 2,
+  hrConsensusToleranceBpm: 6,
+  hrConsensusMinWindows: 16,
+  hrConsensusBase: 0.55,
+  hrConsensusPerWindow: 5,
+  /**
+   * Heart rate passes by EITHER the window consensus above OR the
+   * whole-scan spectral path: POS spectral SNR >= minSpectralHrSnrDb, both
+   * halves' peaks within hrHalvesAgreementBpm, >= minHrBeatAcceptedFraction
+   * plausible beat intervals and beat HR within hrvHrAgreementBpm. See
+   * test/gates.test.ts and test/consensus.test.ts for the noise-only
+   * regression checks. Real-world false acceptance is NOT yet measured.
    */
   minHrSnrDb: -2,
+  /**
+   * SNR floor of the whole-recording (spectral) path. At -2 dB that path
+   * accepted about 0.4% of simulated phone-like noise captures; at 3 dB
+   * it accepted 0 of 4,500 (20-39 s) and 0 of 2,000 (40-90 s).
+   */
+  minSpectralHrSnrDb: 3,
   hrHalvesAgreementBpm: 6,
   minHrBeatAcceptedFraction: 0.7,
   minHrvDurationSec: 30,

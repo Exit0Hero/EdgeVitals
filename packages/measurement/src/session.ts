@@ -29,6 +29,8 @@ export interface LiveScanState {
   interimBreathingRate: number | null;
   /** Pulse SNR (dB) of the signal so far, updated every 2 s after 15 s; null before. */
   interimSnrDb: number | null;
+  /** Past the target length with no heart rate yet: scanning on to extendedUsableSec. */
+  extended: boolean;
 }
 
 export interface FrameInput {
@@ -60,6 +62,7 @@ export class ScanSession {
     private readonly maxScanSec: number = PIPELINE_CONFIG.maxScanSec,
     /** Opt-in experimental estimators (ADR 0008). */
     private readonly experimental: { spo2?: boolean } = {},
+    private readonly extendedUsableSec: number = PIPELINE_CONFIG.extendedUsableSec,
   ) {}
 
   get frameCount(): number {
@@ -163,13 +166,23 @@ export class ScanSession {
       interimHrv: this.interimHrv,
       interimBreathingRate: this.interimBreathing,
       interimSnrDb: this.interimSnr,
+      extended: this.interimHr === null && usableSec >= this.targetUsableSec,
     };
   }
 
-  /** True when enough clean signal is captured or the hard time limit is hit. */
+  /**
+   * True when enough clean signal is captured or the hard time limit is hit.
+   * When the heart rate has not passed its gates by targetUsableSec, the
+   * scan keeps going up to extendedUsableSec: a weak but real pulse gets
+   * more windows to agree on (simulated weak pulses: 53% pass at 45 s, 73%
+   * by 75 s; pulseless captures checked at every interim step up to 75 s:
+   * none passed). See docs/adr/0004.
+   */
   shouldFinish(): boolean {
     const s = this.liveStateLite();
-    return s.usableSec >= this.targetUsableSec || s.elapsedSec >= this.maxScanSec;
+    if (s.elapsedSec >= this.maxScanSec) return true;
+    if (s.usableSec < this.targetUsableSec) return false;
+    return this.interimHr !== null || s.usableSec >= this.extendedUsableSec;
   }
 
   private liveStateLite(): { usableSec: number; elapsedSec: number } {

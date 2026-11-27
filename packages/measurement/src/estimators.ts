@@ -144,3 +144,85 @@ export function estimateBreathing(
     rifv !== null && riiv !== null && Math.abs(rifv - riiv) <= cfg.breathingAgreementPerMin;
   return { rifvPerMin: rifv, riivPerMin: riiv, perMin: agree ? (rifv! + riiv!) / 2 : null };
 }
+
+export interface HeartRateConsensus {
+  /** Median of the window peaks that agree, bpm. */
+  bpm: number;
+  /** Fraction of windows whose strongest peak is within tolerance of `bpm`. */
+  agreement: number;
+  /** Agreement needed for this many windows (see minConsensusAgreement). */
+  required: number;
+  windows: number;
+  /** Strongest in-band peak of each window, bpm. */
+  peaks: number[];
+}
+
+/** Agreement a capture with `windows` analysis windows must reach. */
+export function minConsensusAgreement(windows: number): number {
+  return cfg.hrConsensusBase + cfg.hrConsensusPerWindow / windows;
+}
+
+/**
+ * Window-consensus heart rate, for captures where the pulse is real but
+ * weak (SNR around 0 dB, typical of phone front cameras).
+ *
+ * The pulse is cut into `hrConsensusWindowSec` windows every
+ * `hrConsensusHopSec`. Each window votes with its strongest in-band peak.
+ * Noise scatters those votes across 42-180 bpm; a pulse puts most of them
+ * at the same rate even when one noise burst dominates the whole-recording
+ * spectrum (which is what broke the halves check on real phone data). The
+ * consensus is the rate with the most votes within `hrConsensusToleranceBpm`.
+ *
+ * Votes from overlapping windows are correlated and fewer windows agree
+ * by chance more often, so the agreement needed falls with the window
+ * count (minConsensusAgreement). The constants were set from 2,000+
+ * simulated pulseless captures with white and phone-like coloured noise
+ * (none reached the bar); see docs/adr/0004 and test/gates.test.ts.
+ */
+export function consensusHeartRate(pulse: number[], fs: number): HeartRateConsensus | null {
+  const [lo, hi] = cfg.hrBandHz;
+  const winLen = Math.round(cfg.hrConsensusWindowSec * fs);
+  const hop = Math.max(1, Math.round(cfg.hrConsensusHopSec * fs));
+  if (pulse.length < winLen) return null;
+  const peaks: number[] = [];
+  for (let s = 0; s + winLen <= pulse.length; s += hop) {
+    const spec = welch(pulse.slice(s, s + winLen), fs, cfg.hrConsensusWindowSec, 2048);
+    let best = -1;
+    for (let k = 0; k < spec.freqs.length; k++) {
+      const f = spec.freqs[k]!;
+      if (f < lo || f > hi) continue;
+      if (best < 0 || spec.power[k]! > spec.power[best]!) best = k;
+    }
+    if (best < 0 || !(spec.power[best]! > 0)) return null;
+    peaks.push(spec.freqs[best]! * 60);
+  }
+  const windows = peaks.length;
+  if (windows < cfg.hrConsensusMinWindows) return null;
+  const tol = cfg.hrConsensusToleranceBpm;
+  let bestCount = 0;
+  let centre = 0;
+  for (let c = lo * 60; c <= hi * 60; c += 0.5) {
+    const n = peaks.filter((p) => Math.abs(p - c) <= tol).length;
+    if (n > bestCount) {
+      bestCount = n;
+      centre = c;
+    }
+  }
+  const agreeing = peaks.filter((p) => Math.abs(p - centre) <= tol);
+  return {
+    bpm: median(agreeing),
+    agreement: agreeing.length / windows,
+    required: minConsensusAgreement(windows),
+    windows,
+    peaks,
+  };
+}
+
+/** SNR (dB) of a pulse at frequency f0, same definition as estimateHeartRate. */
+export function snrAt(pulse: number[], fs: number, f0: number): number {
+  const spec = welch(pulse, fs, Math.min(12, pulse.length / fs), 8192);
+  const signal = bandPower(spec, f0 - 0.2, f0 + 0.2) + bandPower(spec, 2 * f0 - 0.3, 2 * f0 + 0.3);
+  const total = bandPower(spec, 0.7, 4.0);
+  const noise = total - signal;
+  return noise > 0 ? 10 * Math.log10(signal / noise) : 30;
+}

@@ -1,7 +1,14 @@
 import { ALGORITHM_NAME, CONFIG_VERSION, PIPELINE_CONFIG, PIPELINE_VERSION } from './config';
 import { bandpass, mean, median, resampleUniform, std } from './dsp';
-import { estimateBreathing, estimateHeartRate, estimateHrv } from './estimators';
+import {
+  consensusHeartRate,
+  estimateBreathing,
+  estimateHeartRate,
+  estimateHrv,
+  snrAt,
+} from './estimators';
 import { pos } from './pos';
+import { pbv } from './pbv';
 import { EXPERIMENTAL_SPO2, estimateExperimentalSpo2 } from './experimentalSpo2';
 import type {
   CaptureDiagnostics,
@@ -221,15 +228,35 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
 
     // Beat analysis is shared by the HR consistency gate and HRV.
     const beats = hr ? estimateHrv(hr.pulse, fs, hr.bpm) : null;
-    const hrOk =
+    // Two ways to pass. (1) Window consensus on the PBV pulse, for captures
+    // of about 40 s or more: catches weak but steady pulses (phone front
+    // cameras at ~0 dB SNR). (2) The whole-recording spectrum of the POS
+    // pulse, cross-checked by its two halves and by beat timing, with an
+    // SNR floor high enough that coloured noise does not pass it (at -2 dB
+    // it accepted ~0.4% of phone-like noise captures). (2) also covers
+    // skin tones whose pulse colour is far from the PBV signature.
+    const pbvPulse = pbv(r, g, b, Math.round(cfg.hrPbvWindowSec * fs), fs, cfg.hrBandHz);
+    const cons = consensusHeartRate(pbvPulse, fs);
+    const consSnr = cons ? snrAt(pbvPulse, fs, cons.bpm / 60) : null;
+    const consensusOk =
+      !!cons &&
+      consSnr !== null &&
+      cons.agreement >= cons.required &&
+      consSnr >= cfg.minHrSnrDb &&
+      cons.bpm >= 42 &&
+      cons.bpm <= 180;
+    const spectralOk =
       !!hr &&
-      hr.snrDb >= cfg.minHrSnrDb &&
+      hr.snrDb >= cfg.minSpectralHrSnrDb &&
       hr.halvesDiffBpm <= cfg.hrHalvesAgreementBpm &&
       hr.bpm >= 42 &&
       hr.bpm <= 180 &&
       !!beats &&
       beats.acceptedFraction >= cfg.minHrBeatAcceptedFraction &&
       Math.abs(beats.meanHrBpm - hr.bpm) <= cfg.hrvHrAgreementBpm;
+    const hrOk = spectralOk || consensusOk;
+    const hrBpm = spectralOk ? hr!.bpm : consensusOk ? cons!.bpm : null;
+    const hrSnr = spectralOk ? hr!.snrDb : consensusOk ? consSnr! : null;
     if (hr) {
       diagnostics.hrGate = {
         bpm: round(hr.bpm, 1),
@@ -237,17 +264,26 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
         halvesDiffBpm: Number.isFinite(hr.halvesDiffBpm) ? round(hr.halvesDiffBpm, 1) : -1,
         beatAcceptedFraction: beats ? round(beats.acceptedFraction, 3) : null,
         beatMeanHrBpm: beats ? round(beats.meanHrBpm, 1) : null,
+        acceptedBy: spectralOk ? 'spectral' : consensusOk ? 'consensus' : null,
       };
+      if (cons && consSnr !== null)
+        diagnostics.hrGate.consensus = {
+          bpm: round(cons.bpm, 1),
+          agreement: round(cons.agreement, 3),
+          required: round(cons.required, 3),
+          windows: cons.windows,
+          snrDb: round(consSnr, 2),
+        };
     }
     diagnostics.ibiCount = beats?.ibiCount ?? 0;
     diagnostics.ibiAcceptedFraction = beats ? round(beats.acceptedFraction, 3) : null;
-    if (!hr || !hrOk) {
+    if (!hrOk || hrBpm === null || hrSnr === null) {
       for (const m of SUPPORTED_METRICS) results.set(m, unavailable(m, 'low_signal_quality'));
       if (opts.experimentalSpo2)
         spo2Result = experimentalUnavailable('low_signal_quality', ['heart_rate_gate']);
     } else {
       if (opts.experimentalSpo2) {
-        const s = estimateExperimentalSpo2(r, b, hr.pulse, fs);
+        const s = estimateExperimentalSpo2(r, b, hr?.pulse ?? pbvPulse, fs);
         diagnostics.experimentalSpo2 = {
           ratio: s.ratio === null ? null : round(s.ratio, 4),
           acceptedFraction: round(s.acceptedFraction, 3),
@@ -257,7 +293,7 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
         spo2Result =
           s.value !== null
             ? {
-                ...valid('spo2', s.value, hrQualityFor(hr.snrDb) * s.acceptedFraction, [
+                ...valid('spo2', s.value, hrQualityFor(hrSnr) * s.acceptedFraction, [
                   'experimental',
                 ]),
                 provenance: EXPERIMENTAL_PROVENANCE,
@@ -272,8 +308,8 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
                   [s.failure ?? 'weak_pulse'],
                 );
       }
-      const hrQuality = hrQualityFor(hr.snrDb);
-      results.set('heart_rate', valid('heart_rate', round(hr.bpm, 0), hrQuality));
+      const hrQuality = hrQualityFor(hrSnr);
+      results.set('heart_rate', valid('heart_rate', round(hrBpm, 0), hrQuality));
 
       // HRV
       const hrv = beats;
@@ -282,12 +318,13 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
       } else {
         if (
           !hrv ||
+          !hr ||
           hr.snrDb < cfg.minHrvSnrDb ||
           hrv.ibiCount < cfg.minIbiCount ||
           hrv.acceptedFraction < cfg.minIbiAcceptedFraction
         ) {
           results.set('hrv', unavailable('hrv', 'low_signal_quality'));
-        } else if (Math.abs(hrv.meanHrBpm - hr.bpm) > cfg.hrvHrAgreementBpm) {
+        } else if (Math.abs(hrv.meanHrBpm - hrBpm) > cfg.hrvHrAgreementBpm) {
           results.set('hrv', unavailable('hrv', 'inconsistent_estimates'));
         } else if (hrv.rmssdMs < cfg.hrvRangeMs[0] || hrv.rmssdMs > cfg.hrvRangeMs[1]) {
           results.set('hrv', unavailable('hrv', 'out_of_operating_range'));
