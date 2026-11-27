@@ -1,11 +1,20 @@
 import { FingerScanSession, type FingerLiveState } from '@edgevitals/measurement';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Linking, Platform, Pressable, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  AppState,
+  Linking,
+  Platform,
+  Pressable,
+  Share,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, ApiError } from '../../api/client';
 import { getExposureLock } from '../../camera/captureNotes';
 import { FingerCamera } from '../../camera/FingerCamera';
+import { StartLog, startProblem } from '../../camera/fingerStart';
 import type { CameraStatus } from '../../camera/types';
 import { Icon } from '../../components/Icon';
 import { PulseWave } from '../../components/PulseWave';
@@ -41,6 +50,24 @@ export default function FingerScan() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const finishing = useRef(false);
+  // Start-up log, shared from the error screen or the scan card.
+  const log = useRef(new StartLog());
+  const camStatusRef = useRef<CameraStatus>('idle');
+  const camDetailRef = useRef<string | undefined>(undefined);
+  const openedAt = useRef(Date.now());
+  const runningAt = useRef<number | null>(null);
+  const frames = useRef(0);
+
+  const shareLog = useCallback(() => {
+    Share.share({
+      message: [
+        `EdgeVitals finger scan start-up log (${Platform.OS} ${String(Platform.Version)})`,
+        `status: ${camStatusRef.current}${camDetailRef.current ? ` (${camDetailRef.current})` : ''}`,
+        `frames received: ${frames.current}`,
+        log.current.text(),
+      ].join('\n'),
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(
     () => () => {
@@ -85,6 +112,7 @@ export default function FingerScan() {
   const onFrame = useCallback(
     (f: Parameters<FingerScanSession['pushFrame']>[0]) => {
       if (finishing.current) return;
+      frames.current++;
       try {
         session.current.pushFrame(f);
       } catch {
@@ -97,8 +125,14 @@ export default function FingerScan() {
 
   const onStatus = useCallback(
     (s: CameraStatus, detail?: string) => {
+      log.current.add(`status: ${s}${detail ? ` (${detail})` : ''}`);
+      camStatusRef.current = s;
+      camDetailRef.current = detail;
       setCamStatus(s);
       setCamDetail(detail);
+      if (s === 'running' && runningAt.current === null) runningAt.current = Date.now();
+      // Time spent in the permission dialog does not count toward start-up.
+      if (s === 'requesting') openedAt.current = Date.now();
       if (s === 'running') {
         setPhase('scanning');
         if (a?.assessmentId) api.setStatus(a.assessmentId, 'capturing').catch(() => undefined);
@@ -115,6 +149,37 @@ export default function FingerScan() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // Start-up watchdog: never sit on a blank screen. If the camera has not
+  // started, or started without sending frames, show an error that says so.
+  useEffect(() => {
+    if (
+      camStatus === 'denied' ||
+      camStatus === 'unavailable' ||
+      camStatus === 'error' ||
+      camStatus === 'requesting'
+    )
+      return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      const p = startProblem(
+        now - openedAt.current,
+        runningAt.current === null ? null : now - runningAt.current,
+        frames.current,
+      );
+      if (p === 'not_started')
+        onStatus(
+          'error',
+          'The back camera did not start within 10 seconds. Close other camera apps and try again.',
+        );
+      else if (p === 'no_frames')
+        onStatus(
+          'error',
+          'The back camera started but sent no frames for 5 seconds, so nothing could be measured.',
+        );
+    }, 1000);
+    return () => clearInterval(id);
+  }, [camStatus, onStatus, attempt]);
+
   // Leaving the screen stops the camera (and the flash) and discards the scan.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (st) => {
@@ -130,6 +195,10 @@ export default function FingerScan() {
   }, [phase]);
 
   const restart = () => {
+    log.current.add('restart');
+    openedAt.current = Date.now();
+    runningAt.current = null;
+    frames.current = 0;
     session.current = new FingerScanSession();
     finishing.current = false;
     setError(null);
@@ -218,6 +287,12 @@ export default function FingerScan() {
           ) : null}
           <PrimaryButton label="Try again" onPress={restart} />
           <TextButton
+            label="Share start-up details"
+            color={colors.scanText}
+            onPress={shareLog}
+            testID="finger-share-log"
+          />
+          <TextButton
             label="Use the face scan instead"
             color={colors.scanText}
             onPress={() => router.replace('/assessment/scan')}
@@ -241,6 +316,7 @@ export default function FingerScan() {
                 onFrame={onFrame}
                 onStatus={onStatus}
                 size={PREVIEW}
+                log={log.current}
               />
             </View>
             <View
@@ -367,6 +443,12 @@ export default function FingerScan() {
                 ? `${Math.floor(live.usableSec)} of 60 seconds of clean signal · stops by itself in ${live.secondsLeft} s so the flash doesn't get hot`
                 : 'About 60 seconds. The flash stays on only while scanning.'}
             </T>
+            <TextButton
+              label="Problems? Share start-up details"
+              align="flex-start"
+              onPress={shareLog}
+              testID="finger-share-log-card"
+            />
           </View>
         </>
       )}

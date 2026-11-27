@@ -21,6 +21,7 @@ import { T } from '../components/ui';
 import { setCameraBreadcrumb } from '../lib/crashRecorder';
 import { colors } from '../theme/tokens';
 import { setExposureLock } from './captureNotes';
+import { enableTorchWithRetry, type StartLog } from './fingerStart';
 import { createTimestampNormalizer } from './timestamps';
 import type { CameraStatus } from './types';
 
@@ -29,32 +30,34 @@ import type { CameraStatus } from './types';
  * is reduced to the mean colour of its central area on the frame thread; no
  * pixels, images or video leave that thread or the device.
  *
- * The torch is on only while `active` is true. The scan screen turns it off
- * when the scan ends, is cancelled, the app is backgrounded, or the
- * torch-heat time limit is reached.
+ * The flash is switched on after the camera reports it has started (with
+ * retries, see fingerStart.ts) and off when the camera stops. Every start-up
+ * step is written to `log`, which the scan screen can share.
  *
- * Status: unit-tested on synthetic frames only. NOT yet verified on a phone.
+ * Status: start-up logic unit-tested; NOT yet verified on a phone.
  */
 export interface FingerCameraProps {
   active: boolean;
   onFrame: (f: FingerFrameInput) => void;
   onStatus: (s: CameraStatus, detail?: string) => void;
   size: number;
+  log: StartLog;
 }
 
 const TIMESTAMP_SCALE = Platform.OS === 'android' ? 1e-6 : 1e3;
 // The torch changes the light level a lot, so exposure is locked a little
 // later than for the face scan.
 const EXPOSURE_SETTLE_MS = 2000;
-const CONSTRAINTS = [{ fps: 30 }];
 
 interface Result {
   ts: number;
   sample: FingerSample | null;
   unsupported?: string;
+  /** Frame format and size, for the start-up log. */
+  info?: string;
 }
 
-export function FingerCamera({ active, onFrame, onStatus, size }: FingerCameraProps) {
+export function FingerCamera({ active, onFrame, onStatus, size, log }: FingerCameraProps) {
   const permission = useCameraPermission();
   const device = useCameraDevice('back');
   const cb = useRef({ onFrame, onStatus });
@@ -63,6 +66,18 @@ export function FingerCamera({ active, onFrame, onStatus, size }: FingerCameraPr
   request.current = permission.requestPermission;
   const hasDevice = !!device;
   const hasTorch = !!device?.hasTorch;
+  const logRef = useRef(log);
+  logRef.current = log;
+
+  useEffect(() => {
+    logRef.current.add(
+      `camera permission: ${permission.status}; back camera: ${
+        device
+          ? `${device.id} "${device.localizedName}" position=${device.position} hasTorch=${device.hasTorch}`
+          : 'none yet'
+      }`,
+    );
+  }, [permission.status, device]);
 
   useEffect(() => {
     if (!active) return;
@@ -111,7 +126,7 @@ export function FingerCamera({ active, onFrame, onStatus, size }: FingerCameraPr
       accessibilityLabel="Back camera view"
     >
       {ready && device ? (
-        <FingerProcessingCamera device={device} active={active} size={size} cb={cb} />
+        <FingerProcessingCamera device={device} active={active} size={size} cb={cb} log={log} />
       ) : (
         <T variant="small" color={colors.scanMuted}>
           Camera
@@ -147,27 +162,39 @@ function FingerProcessingCamera({
   active,
   size,
   cb,
+  log,
 }: {
   device: CameraDevice;
   active: boolean;
   size: number;
   cb: Callbacks;
+  log: StartLog;
 }) {
   const ref = useRef<CameraRef>(null);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const normalize = useRef(createTimestampNormalizer(TIMESTAMP_SCALE));
   const reported = useRef(false);
+  const firstFrame = useRef(false);
+  const unmounted = useRef(false);
   useEffect(
     () => () => {
+      unmounted.current = true;
       if (lockTimer.current) clearTimeout(lockTimer.current);
+      // The camera stopping turns the flash off too; this is belt and braces.
+      ref.current?.controller?.setTorchMode('off').catch(() => undefined);
     },
     [],
   );
 
   const deliver = useCallback(
     (r: Result) => {
+      if (!firstFrame.current) {
+        firstFrame.current = true;
+        log.add(`first frame: ${r.info ?? 'no info'}`);
+      }
       if (r.unsupported) {
         if (!reported.current) {
+          log.add(`frame format unsupported: ${r.unsupported}`);
           reported.current = true;
           cb.current.onStatus('unavailable', r.unsupported);
         }
@@ -181,9 +208,15 @@ function FingerProcessingCamera({
         cb.current.onStatus('error', `Frame handling failed: ${String(e)}`);
       }
     },
-    [cb],
+    [cb, log],
   );
-  const fail = useCallback((m: string) => cb.current.onStatus('error', m), [cb]);
+  const fail = useCallback(
+    (m: string) => {
+      log.add(`frame error: ${m}`);
+      cb.current.onStatus('error', m);
+    },
+    [cb, log],
+  );
 
   // Stable worklet (see CameraScanner): processed synchronously on the frame thread.
   const onFrame = useMemo(
@@ -220,26 +253,52 @@ function FingerProcessingCamera({
       device={device}
       isActive={active}
       outputs={outputs}
-      constraints={CONSTRAINTS}
-      torchMode={active ? 'on' : 'off'}
       resizeMode="cover"
       onStarted={() => {
+        log.add('camera started');
         setCameraBreadcrumb('finger');
         cb.current.onStatus('running');
         setExposureLock('pending');
-        if (lockTimer.current) clearTimeout(lockTimer.current);
-        lockTimer.current = setTimeout(() => {
-          lockExposure(ref.current, device, size).catch(() => undefined);
-        }, EXPOSURE_SETTLE_MS);
+        enableTorchWithRetry(
+          ref.current?.controller,
+          log,
+          undefined,
+          undefined,
+          () => unmounted.current,
+        )
+          .then((t) => {
+            if (unmounted.current) return;
+            if (!t.ok) {
+              cb.current.onStatus(
+                'error',
+                `The flash could not be turned on (${t.error ?? 'unknown reason'}). The finger scan needs the flash.`,
+              );
+              return;
+            }
+            if (lockTimer.current) clearTimeout(lockTimer.current);
+            lockTimer.current = setTimeout(() => {
+              lockExposure(ref.current, device, size)
+                .then(() => log.add('exposure lock attempted'))
+                .catch(() => undefined);
+            }, EXPOSURE_SETTLE_MS);
+          })
+          .catch((e) => cb.current.onStatus('error', `Flash start failed: ${String(e)}`));
       }}
-      onStopped={() => setCameraBreadcrumb(null)}
-      onError={(e) => cb.current.onStatus('error', `Camera initialization failed: ${e.message}`)}
-      onInterruptionStarted={() =>
+      onStopped={() => {
+        log.add('camera stopped');
+        setCameraBreadcrumb(null);
+      }}
+      onError={(e) => {
+        log.add(`camera error: ${e.message}`);
+        cb.current.onStatus('error', `The camera reported an error: ${e.message}`);
+      }}
+      onInterruptionStarted={() => {
+        log.add('camera interrupted');
         cb.current.onStatus(
           'error',
           'The camera was interrupted by another app or a call. Try again when it is free.',
-        )
-      }
+        );
+      }}
     />
   );
 }
@@ -247,11 +306,13 @@ function FingerProcessingCamera({
 function processFingerFrame(frame: Frame, deliver: (r: Result) => void): void {
   'worklet';
   const fmt = frame.pixelFormat;
+  const info = `${fmt} ${frame.width}x${frame.height} planar=${frame.isPlanar}`;
   const is420 = fmt === 'yuv-420-8-bit-full' || fmt === 'yuv-420-8-bit-video';
   if (!is420 || !frame.isPlanar) {
     scheduleOnRN(deliver, {
       ts: frame.timestamp,
       sample: null,
+      info,
       unsupported: `This camera delivers ${fmt} frames, which the scan cannot read yet.`,
     });
     return;
@@ -291,5 +352,5 @@ function processFingerFrame(frame: Frame, deliver: (r: Result) => void): void {
     },
     4,
   );
-  scheduleOnRN(deliver, { ts: frame.timestamp, sample });
+  scheduleOnRN(deliver, { ts: frame.timestamp, sample, info });
 }

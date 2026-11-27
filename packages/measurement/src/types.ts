@@ -221,8 +221,10 @@ export interface FingerDiagnostics {
   halvesDiffBpm: number | null;
   beatMeanHrBpm: number | null;
   sdnnMs: number | null;
-  /** Estimated beat-timing error, ms. HRV abstains above maxTimingNoiseMs. */
+  /** Estimated beat-timing error, ms (bootstrap, scaled by timingErrorScale). */
   timingNoiseMs: number | null;
+  /** Largest timing error this recording's beat variation tolerates for HRV, ms. */
+  timingLimitMs: number | null;
   breathing: BreathingModulation[];
   /** (AC/DC red) / (AC/DC blue). Recorded only; no SpO2 is derived from it. */
   ratioOfRatiosRedBlue: number | null;

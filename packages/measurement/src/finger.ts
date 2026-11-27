@@ -84,12 +84,23 @@ export const FINGER_CONFIG = {
   minHrvAcceptedFraction: 0.85,
   hrvRangeMs: [5, 200] as [number, number],
   /**
-   * HRV abstains when the estimated beat-timing error is above this. Timing
-   * noise adds to RMSSD (about sqrt(6) x the per-beat error, before the
-   * estimate's own under-reading). On synthetic traces, estimates up to
-   * 3.3 ms came with +0-7 ms RMSSD error; 6 ms and above with +20 ms.
+   * Beat-timing error is measured per recording by a bootstrap (rebuild the
+   * pulse from its own template and residuals, re-detect, compare). On
+   * synthetic traces the bootstrap reads 1.3-2.4x low, so it is scaled by
+   * this factor before use.
    */
-  maxTimingNoiseMs: 4,
+  timingErrorScale: 2,
+  /**
+   * Timing error inflates RMSSD: observed^2 ~ true^2 + 6 sigma^2. HRV is
+   * shown only when that inflation is at most this share of observed^2.
+   */
+  maxTimingShareOfRmssd: 0.25,
+  /**
+   * And never above this (after scaling): on noisy synthetic traces the
+   * bootstrap under-reads most, and recordings at 9-11 ms came with +30% to
+   * +400% RMSSD error; at 8 ms and below, within +17%.
+   */
+  maxTimingErrorMs: 8,
   breathingBandHz: [0.1, 0.5] as [number, number],
   /**
    * A respiratory modulation counts only if this share of its 0.05-0.7 Hz
@@ -201,6 +212,7 @@ export function extractFingerYuv(frame: YuvFrame, step = 4): FingerSample {
 const fc = FINGER_CONFIG;
 
 function relStep(a: FingerSample, b: FingerSample): number {
+  // A dark channel (a few counts) steps by 5-10% on quantisation alone.
   const rel = (p: number, q: number) => (p > 1 ? Math.abs(q - p) / p : 0);
   // Red is often clipped near 255 and carries no step information then.
   return Math.max(rel(a.g, b.g), a.r < 245 ? rel(a.r, b.r) : 0);
@@ -264,7 +276,6 @@ function refineByTemplate(
   coarse: number[],
   period: number,
   fs: number,
-  captureFps: number,
 ): { beats: number[]; timingNoiseMs: number | null } {
   const pre = Math.round(0.3 * period * fs);
   const post = Math.round(0.5 * period * fs);
@@ -281,10 +292,35 @@ function refineByTemplate(
   const tm = mean(tpl);
   for (let k = 0; k < len; k++) tpl[k] = tpl[k]! / used - tm / used;
   const maxLag = Math.max(1, Math.round(0.15 * period * fs));
-  const residuals: number[] = [];
+  const first = alignBeats(x, coarse, tpl, pre, maxLag);
+  return {
+    beats: first.beats,
+    timingNoiseMs: bootstrapTimingNoise(x.length, coarse, first, tpl, pre, maxLag, fs),
+  };
+}
+
+interface Alignment {
+  beats: number[];
+  /** Per beat: fitted template gain and residual (raw minus offset minus gain x template), or null at the edges. */
+  fits: ({ gain: number; residual: number[] } | null)[];
+}
+
+/** Cross-correlate each beat with the template around its coarse position. */
+function alignBeats(
+  x: ArrayLike<number>,
+  coarse: number[],
+  tpl: number[],
+  pre: number,
+  maxLag: number,
+): Alignment {
+  const len = tpl.length;
+  const fits: Alignment['fits'] = [];
   const beats = coarse.map((p) => {
     const c = Math.round(p);
-    if (c - pre - maxLag - 1 < 0 || c + post + maxLag + 1 >= x.length) return p;
+    if (c - pre - maxLag - 1 < 0 || c - pre + len + maxLag + 1 >= x.length) {
+      fits.push(null);
+      return p;
+    }
     const score = (lag: number) => {
       let s = 0;
       for (let k = 0; k < len; k++) s += tpl[k]! * x[c + lag - pre + k]!;
@@ -300,42 +336,92 @@ function refineByTemplate(
       }
     }
     const a = score(bestLag - 1);
-    const b = best;
     const d = score(bestLag + 1);
-    const denom = a - 2 * b + d;
+    const denom = a - 2 * best + d;
     const frac = denom < 0 ? (0.5 * (a - d)) / denom : 0;
-    // Residual after fitting the template's scale and offset to this beat.
-    let sxy = 0;
-    let syy = 0;
     let xm = 0;
     for (let k = 0; k < len; k++) xm += x[c + bestLag - pre + k]!;
     xm /= len;
+    let sxy = 0;
+    let syy = 0;
     for (let k = 0; k < len; k++) {
       sxy += tpl[k]! * (x[c + bestLag - pre + k]! - xm);
       syy += tpl[k]! * tpl[k]!;
     }
     const gain = syy > 0 ? sxy / syy : 0;
-    let rr = 0;
-    for (let k = 0; k < len; k++) {
-      const e = x[c + bestLag - pre + k]! - xm - gain * tpl[k]!;
-      rr += e * e;
-    }
-    if (gain > 0) residuals.push(rr / len / (gain * gain));
+    const residual = new Array<number>(len);
+    for (let k = 0; k < len; k++) residual[k] = x[c + bestLag - pre + k]! - xm - gain * tpl[k]!;
+    fits.push({ gain, residual });
     return c + bestLag + Math.max(-0.5, Math.min(0.5, frac));
   });
-  // Expected timing error of the alignment (Cramer-Rao bound for a known
-  // shape in white noise): noise SD over the template's slope energy. The
-  // signal was resampled from captureFps to fs, so neighbouring samples are
-  // not independent; the sqrt(fs / captureFps) factor corrects for that.
-  let slope = 0;
-  for (let k = 1; k < len - 1; k++) slope += ((tpl[k + 1]! - tpl[k - 1]!) / 2) ** 2;
-  const noiseSd = residuals.length ? Math.sqrt(median(residuals)) : NaN;
-  const sigmaSamples =
-    slope > 0 ? (noiseSd / Math.sqrt(slope)) * Math.sqrt(Math.max(1, fs / captureFps)) : NaN;
-  return {
-    beats,
-    timingNoiseMs: Number.isFinite(sigmaSamples) ? (1000 * sigmaSamples) / fs : null,
+  return { beats, fits };
+}
+
+/**
+ * Beat-timing error measured by simulation from this recording (a
+ * parametric bootstrap). A pulse train is rebuilt from the recording's own
+ * average beat, at its own beat times and sizes, plus the recording's own
+ * per-beat residuals (noise and beat-to-beat shape changes) shuffled
+ * between beats. The same alignment is run on it, and the spread of
+ * (found - true) beat times is the timing error. A formula-based estimate
+ * (Cramer-Rao) read 2-3x too low on synthetic tests because the residuals
+ * are neither white nor independent of the beat shape.
+ */
+function bootstrapTimingNoise(
+  n: number,
+  coarse: number[],
+  first: Alignment,
+  tpl: number[],
+  pre: number,
+  maxLag: number,
+  fs: number,
+  reps = 4,
+): number | null {
+  const ok = first.fits.map((f, i) => (f && f.gain > 0 ? i : -1)).filter((i) => i >= 0);
+  if (ok.length < 10) return null;
+  const len = tpl.length;
+  const tplAt = (u: number) => {
+    if (u <= 0 || u >= len - 1) return 0;
+    const i = Math.floor(u);
+    return tpl[i]! + (u - i) * (tpl[i + 1]! - tpl[i]!);
   };
+  let seed = 12345;
+  const rand = () => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return seed / 4294967296;
+  };
+  const errs: number[] = [];
+  for (let r = 0; r < reps; r++) {
+    const y = new Float64Array(n);
+    const order = ok.slice();
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+    ok.forEach((bi, k) => {
+      const p = first.beats[bi]!;
+      const g = first.fits[bi]!.gain;
+      const noise = first.fits[order[k]!]!.residual;
+      const c = Math.round(p);
+      for (let m = 0; m < len; m++) {
+        const j = c - pre + m;
+        if (j < 0 || j >= n) continue;
+        y[j] = y[j]! + g * tplAt(j - (p - pre)) + noise[m]!;
+      }
+    });
+    const again = alignBeats(
+      y,
+      ok.map((bi) => coarse[bi]!),
+      tpl,
+      pre,
+      maxLag,
+    );
+    const d = ok.map((bi, k) => again.beats[k]! - first.beats[bi]!);
+    const md = median(d);
+    for (const v of d) if (Math.abs(v - md) < 0.2 * fs) errs.push(v - md);
+  }
+  if (errs.length < 10) return null;
+  return (1000 * std(errs)) / fs;
 }
 
 export interface FingerBeats {
@@ -362,7 +448,6 @@ export function detectFingerBeats(
   pulse: number[],
   fs: number,
   spectralHrBpm: number,
-  captureFps = 30,
 ): FingerBeats | null {
   const x = bandpass(pulse, fc.beatBandHz[0], fc.beatBandHz[1], fs);
   const d = new Array<number>(x.length).fill(0);
@@ -374,7 +459,7 @@ export function detectFingerBeats(
   const hMed = median(heights);
   const coarse = peaks.filter((_, i) => heights[i]! > 0.35 * hMed);
   if (coarse.length < 3) return null;
-  const refined = refineByTemplate(x, coarse, period, fs, captureFps);
+  const refined = refineByTemplate(x, coarse, period, fs);
   const kept = refined.beats;
   const times = kept.map((p) => p / fs);
   const half = Math.round(0.45 * period * fs);
@@ -557,6 +642,7 @@ export function analyzeFingerSession(
     beatMeanHrBpm: null,
     sdnnMs: null,
     timingNoiseMs: null,
+    timingLimitMs: null,
     breathing: [],
     ratioOfRatiosRedBlue: null,
   };
@@ -645,9 +731,15 @@ export function analyzeFingerSession(
   finger.channel = best.c;
   diagnostics.hrSnrDb = round(hr.snrDb, 2);
   finger.halvesDiffBpm = Number.isFinite(hr.halvesDiffBpm) ? round(hr.halvesDiffBpm, 1) : null;
-  const captureFps = mdt > 0 ? 1000 / mdt : 30;
-  const beats = detectFingerBeats(inv, fs, hr.bpm, captureFps);
-  finger.timingNoiseMs = beats?.timingNoiseMs != null ? round(beats.timingNoiseMs, 1) : null;
+  const beats = detectFingerBeats(inv, fs, hr.bpm);
+  finger.timingNoiseMs =
+    beats?.timingNoiseMs != null ? round(fc.timingErrorScale * beats.timingNoiseMs, 1) : null;
+  finger.timingLimitMs = beats
+    ? round(
+        Math.min(fc.maxTimingErrorMs, beats.rmssdMs * Math.sqrt(fc.maxTimingShareOfRmssd / 6)),
+        1,
+      )
+    : null;
   diagnostics.ibiCount = beats?.intervalCount ?? 0;
   diagnostics.ibiAcceptedFraction = beats ? round(beats.acceptedFraction, 3) : null;
   finger.beatMeanHrBpm = beats ? round(beats.meanHrBpm, 1) : null;
@@ -683,7 +775,9 @@ export function analyzeFingerSession(
     accepted < fc.minHrvIntervals ||
     beats.acceptedFraction < fc.minHrvAcceptedFraction ||
     beats.timingNoiseMs === null ||
-    beats.timingNoiseMs > fc.maxTimingNoiseMs
+    fc.timingErrorScale * beats.timingNoiseMs > fc.maxTimingErrorMs ||
+    6 * (fc.timingErrorScale * beats.timingNoiseMs) ** 2 >
+      fc.maxTimingShareOfRmssd * beats.rmssdMs ** 2
   )
     results.set('hrv', unavailable('hrv', 'low_signal_quality'));
   else if (beats.rmssdMs < fc.hrvRangeMs[0] || beats.rmssdMs > fc.hrvRangeMs[1])
