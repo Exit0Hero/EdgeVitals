@@ -1,6 +1,7 @@
 import type {
   BaselineProgress,
   DailyScores,
+  HealthSyncUpload,
   Insight,
   ReportProgress,
   RelativeStatus,
@@ -166,7 +167,7 @@ export interface Me {
     heart_rate_affecting_substance: 'no' | 'yes' | 'skip' | null;
   } | null;
   consents: Record<
-    'processing' | 'wellness_acknowledgement' | 'anonymous_improvement',
+    'processing' | 'wellness_acknowledgement' | 'anonymous_improvement' | 'health_sync',
     ConsentState
   >;
   required_consents_granted: boolean;
@@ -243,17 +244,48 @@ export type Trends = TrendSeries & {
   insight: Insight | null;
   summaries: {
     resting_heart_rate: { value: number | null; relative: RelativeStatus; sample_count: number };
-    /** Latest licensed-SDK reading in the period (ADR 0007), else nulls. */
+    /**
+     * Newest blood pressure in the period: licensed SDK (ADR 0007), the user's
+     * own cuff entry ('cuff'), or their health app ('health_connect' /
+     * 'apple_health', ADR 0009). Nulls when there is none.
+     */
     blood_pressure: {
       value: number | null;
       value_secondary: number | null;
       measured_at: string | null;
       source: string | null;
+      source_detail: HealthSyncSource | null;
       relative: 'unavailable';
       reason: string | null;
     };
+    /** Newest SpO2 synced from the user's own devices (ADR 0009), or null. */
+    spo2?: {
+      value: number;
+      value_secondary: null;
+      measured_at: string;
+      source: HealthSyncPlatform;
+      source_detail: HealthSyncSource;
+    } | null;
   };
 };
+
+export type HealthSyncPlatform = 'health_connect' | 'apple_health';
+/** Where a synced reading came from: the health store, the app that wrote it, and the device. */
+export interface HealthSyncSource {
+  platform: HealthSyncPlatform;
+  source_app: string;
+  source_name: string | null;
+  device_manufacturer: string | null;
+  device_model: string | null;
+}
+export interface HealthSyncReading extends HealthSyncSource {
+  id: string;
+  metric: 'spo2' | 'blood_pressure';
+  value: number;
+  value_secondary: number | null;
+  measured_at: string;
+  created_at: string;
+}
 
 export interface CuffReading {
   id: string;
@@ -318,6 +350,19 @@ export const api = {
     pulse_bpm: number | null;
     measured_at: string;
   }) => client.request<CuffReading>('POST', '/api/v1/blood-pressure', r),
+  healthSyncReadings: (days = 90, metric?: 'spo2' | 'blood_pressure') =>
+    client.request<{ items: HealthSyncReading[] }>(
+      'GET',
+      `/api/v1/health-sync/readings?days=${days}${metric ? `&metric=${metric}` : ''}`,
+    ),
+  uploadHealthSync: (body: HealthSyncUpload) =>
+    client.request<{ received: number; inserted: number; updated: number }>(
+      'POST',
+      '/api/v1/health-sync/readings',
+      body,
+    ),
+  deleteHealthSyncReadings: () =>
+    client.request<{ deleted: number }>('DELETE', '/api/v1/health-sync/readings'),
   deleteCuffReading: (id: string) => client.request<void>('DELETE', `/api/v1/blood-pressure/${id}`),
   trends: (metric: string, period: string) =>
     client.request<Trends>('GET', `/api/v1/trends?metric=${metric}&period=${period}`),

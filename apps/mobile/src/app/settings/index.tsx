@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Linking, Pressable, View } from 'react-native';
 import { api, ApiError } from '../../api/client';
+import { HealthSyncSection } from '../../components/HealthSyncSection';
 import { TimeField } from '../../components/TimeField';
 import {
   BackHeader,
@@ -304,8 +305,12 @@ export default function Settings() {
         />
         <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
           Blood pressure is not available from the camera. You can log readings from your own cuff
-          in Trends.
+          in Trends, or sync them from your health app below.
         </T>
+      </Section>
+
+      <Section title="Health app sync">
+        <HealthSyncSection />
       </Section>
 
       <Section title="Privacy and consent">

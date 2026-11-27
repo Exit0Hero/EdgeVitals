@@ -149,32 +149,77 @@ export async function insightRoutes(app: FastifyInstance) {
     };
   });
 
-  /** Newest of: the user's own cuff readings and licensed-SDK readings, within the period. */
+  /** Newest reading copied from Health Connect / Apple Health (ADR 0009), within the period. */
+  const latestSynced = async (
+    userId: string,
+    metric: 'spo2' | 'blood_pressure',
+    now: Date,
+    days: number,
+  ) => {
+    const { rows } = await app.db.query(
+      `SELECT value::float8 AS value, value_secondary, measured_at, platform, source_app, source_name,
+              device_manufacturer, device_model
+         FROM health_sync_readings
+        WHERE user_id = $1 AND metric = $2
+          AND measured_at > $3::timestamptz - ($4::int * interval '1 day')
+          AND measured_at <= $3::timestamptz + interval '5 minutes'
+        ORDER BY measured_at DESC LIMIT 1`,
+      [userId, metric, now.toISOString(), days],
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      value: r.value as number,
+      value_secondary: (r.value_secondary as number | null) ?? null,
+      measured_at: new Date(r.measured_at).toISOString(),
+      source: r.platform as 'health_connect' | 'apple_health',
+      source_detail: {
+        platform: r.platform as 'health_connect' | 'apple_health',
+        source_app: r.source_app as string,
+        source_name: (r.source_name as string | null) ?? null,
+        device_manufacturer: (r.device_manufacturer as string | null) ?? null,
+        device_model: (r.device_model as string | null) ?? null,
+      },
+      relative: 'unavailable' as const,
+      reason: null,
+    };
+  };
+
+  /**
+   * Newest of: the user's own cuff readings, readings synced from their health
+   * app, and licensed-SDK readings, within the period. `source` says which.
+   */
   const latestBloodPressure = async (
     userId: string,
     records: AssessmentRecord[],
     now: Date,
     days: number,
   ) => {
-    const sdk = latestSdkBloodPressure(records, now, days);
+    const sdk = { ...latestSdkBloodPressure(records, now, days), source_detail: null };
     const { rows } = await app.db.query(
       `SELECT systolic, diastolic, measured_at FROM cuff_bp_readings
         WHERE user_id = $1 AND measured_at > $2::timestamptz - ($3::int * interval '1 day')
         ORDER BY measured_at DESC LIMIT 1`,
       [userId, now.toISOString(), days],
     );
-    const cuff = rows[0];
-    if (!cuff) return sdk;
-    const cuffAt = new Date(cuff.measured_at).toISOString();
-    if (sdk.measured_at && sdk.measured_at > cuffAt) return sdk;
-    return {
-      value: cuff.systolic as number,
-      value_secondary: cuff.diastolic as number,
-      measured_at: cuffAt,
-      source: 'cuff',
-      relative: 'unavailable' as const,
-      reason: null,
-    };
+    const cuffRow = rows[0];
+    const cuff = cuffRow
+      ? {
+          value: cuffRow.systolic as number,
+          value_secondary: cuffRow.diastolic as number,
+          measured_at: new Date(cuffRow.measured_at).toISOString(),
+          source: 'cuff',
+          source_detail: null,
+          relative: 'unavailable' as const,
+          reason: null,
+        }
+      : null;
+    const synced = await latestSynced(userId, 'blood_pressure', now, days);
+    const candidates = [sdk.measured_at ? sdk : null, cuff, synced].filter(
+      (x): x is NonNullable<typeof x> => !!x,
+    );
+    if (!candidates.length) return sdk;
+    return candidates.reduce((a, b) => (b.measured_at! > a.measured_at! ? b : a));
   };
 
   app.get('/trends', async (req) => {
@@ -203,6 +248,8 @@ export async function insightRoutes(app: FastifyInstance) {
           sample_count: hr.length,
         },
         blood_pressure: await latestBloodPressure(req.userId!, records, now, PERIOD_DAYS[q.period]),
+        // Only from the user's own devices via their health app; null when none (ADR 0009).
+        spo2: await latestSynced(req.userId!, 'spo2', now, PERIOD_DAYS[q.period]),
       },
     };
   });
