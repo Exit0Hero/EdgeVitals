@@ -127,7 +127,7 @@ describe('YUV ROI extraction', () => {
 
   it('maps orientations and infers chroma pixel strides', () => {
     expect(['up', 'right', 'down', 'left'].map((o) => orientationToRotation(o as 'up'))).toEqual([
-      0, 90, 180, 270,
+      0, 270, 180, 90,
     ]);
     // Android U plane of an interleaved VU buffer: 320 px row, 160 samples spaced 2 bytes, last row short by one byte.
     expect(inferPixelStride(320 * 119 + 319, 320, 120, 160)).toBe(2);

@@ -47,7 +47,7 @@ export function CrashNotice() {
         >
           <T variant="heading">The app closed unexpectedly last time</T>
           <T variant="small" color={colors.textSecondary}>
-            {report.kind === 'js_error'
+            {report.kind !== 'closed_during_camera'
               ? 'This error was recorded on your phone. Share it with the developer so it can be fixed. It contains no images or health data.'
               : 'The app stopped while the camera was running. Sharing this note tells the developer which camera stage was active.'}
           </T>

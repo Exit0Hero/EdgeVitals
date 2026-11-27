@@ -38,9 +38,15 @@ export interface YuvFrame {
 /** Clockwise rotation that turns the buffer upright (VisionCamera `Frame.orientation`). */
 export type Rotation = 0 | 90 | 180 | 270;
 
+/**
+ * VisionCamera's `orientation` says how the pixel data is rotated: `'left'`
+ * means rotated 90° counter-clockwise, so it needs 90° clockwise to be upright
+ * (Android maps CameraX `rotationDegrees` 90 to `'left'`; iOS uses the same
+ * convention as `UIImage.Orientation.left`).
+ */
 export function orientationToRotation(o: 'up' | 'right' | 'down' | 'left'): Rotation {
   'worklet';
-  return o === 'right' ? 90 : o === 'down' ? 180 : o === 'left' ? 270 : 0;
+  return o === 'left' ? 90 : o === 'down' ? 180 : o === 'right' ? 270 : 0;
 }
 
 /** Size of the upright image for a buffer of `width` x `height`. */

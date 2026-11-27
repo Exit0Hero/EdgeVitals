@@ -40,7 +40,8 @@
           "icon": "./assets/android-icon-monochrome.png",
           "color": "#1E5EDA"
         }
-      ]
+      ],
+      "./plugins/withJavaCrashRecorder"
     ],
     "scheme": "edgevitals",
     "experiments": {
