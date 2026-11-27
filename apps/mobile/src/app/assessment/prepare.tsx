@@ -25,17 +25,31 @@ const FINGER_STEPS: { icon: IconName; title: string; sub: string }[] = [
   },
 ];
 
+// The face signal is weak on many phones: on the test phone only a scan
+// with the phone propped up and the face held still gave a reading.
 const STEPS: { icon: IconName; title: string; sub: string }[] = [
-  { icon: 'person', title: 'Sit down and relax', sub: 'Rest for a moment before you start' },
-  { icon: 'sun', title: 'Face the camera in even light', sub: 'No strong light behind you' },
-  { icon: 'pulse', title: 'Stay still, breathe normally', sub: "Don't talk during the scan" },
+  {
+    icon: 'person',
+    title: 'Prop the phone up',
+    sub: 'Lean it on something at face height. A hand-held phone moves too much',
+  },
+  {
+    icon: 'sun',
+    title: 'Light your face from the front',
+    sub: 'Face a window or lamp. No strong light behind you',
+  },
+  {
+    icon: 'pulse',
+    title: 'Keep your head still',
+    sub: "Don't talk or look away. Up to 75 seconds if your pulse is faint",
+  },
 ];
 
 /** PDF page 7 — Get ready to scan. Explains the camera before the permission prompt (FR-041). */
 export default function Prepare() {
   const { assessment: a } = useFlow();
   const [busy, setBusy] = useState(false);
-  const [type, setType] = useState<ScanType>('face');
+  const [type, setType] = useState<ScanType>('finger');
   if (!a?.assessmentId) return <Loading />;
   const start = async () => {
     setBusy(true);
@@ -61,8 +75,8 @@ export default function Prepare() {
         value={type}
         onChange={setType}
         options={[
+          { value: 'finger', label: 'Finger scan (recommended)' },
           { value: 'face', label: 'Face scan' },
-          { value: 'finger', label: 'Finger scan' },
         ]}
       />
       <T
@@ -71,8 +85,8 @@ export default function Prepare() {
         style={{ marginTop: space[2], marginBottom: space[4] }}
       >
         {type === 'finger'
-          ? 'Uses the back camera and flash. The signal is much stronger, so HRV and breathing come through more often.'
-          : 'Uses the front camera. Easiest, but HRV and breathing may not come through.'}
+          ? 'Uses the back camera and flash. The signal is much stronger, so it gives a reading far more often, including HRV and breathing.'
+          : 'Uses the front camera. The signal is weak, so it only works with the phone propped up and your head still. HRV and breathing rarely come through.'}
       </T>
       <View
         style={{
@@ -152,7 +166,7 @@ export default function Prepare() {
       <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
         {type === 'finger'
           ? "We'll ask to use your back camera and turn on the flash. The flash can make the phone warm, so the scan stops by itself after about a minute. The video is processed on this device and is never stored or uploaded."
-          : "We'll ask to use your front camera. The video is processed on this device and is never stored or uploaded. The scan takes about a minute."}
+          : "We'll ask to use your front camera. The video is processed on this device and is never stored or uploaded. The scan takes 45 to 75 seconds."}
       </T>
     </Screen>
   );

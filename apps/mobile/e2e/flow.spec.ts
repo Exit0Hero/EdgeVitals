@@ -28,6 +28,8 @@ test('a camera with no face never produces readings', async ({ page }) => {
 
   await expect(page.getByTestId('screen-prepare')).toBeVisible();
   await shot(page, '07-prepare');
+  // Finger scan is the default; these checks cover the face scan.
+  await page.getByTestId('scan-type-face').click();
   await page.getByTestId('start-scan').click();
   await expect(page.getByTestId('screen-scan')).toBeVisible();
   // The fake camera streams a test pattern; the detector must report no face.
@@ -54,6 +56,8 @@ test('demo results are labelled simulated and stay out of Today and Trends', asy
   await page.getByTestId('energy-3').click();
   await page.getByTestId('alcohol-no').click();
   await page.getByTestId('next-scan').click();
+  // Finger scan is the default; these checks cover the face scan.
+  await page.getByTestId('scan-type-face').click();
   await page.getByTestId('start-scan').click();
   await page.getByTestId('demo-results').click();
 
