@@ -1,4 +1,5 @@
 import {
+  createSkinMask,
   extractRoiYuv,
   inferPixelStride,
   orientationToRotation,
@@ -9,6 +10,7 @@ import {
   type FrameInput,
   type RoiSample,
   type Rotation,
+  type SkinMask,
 } from '@edgevitals/measurement';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState, Platform, View } from 'react-native';
@@ -19,7 +21,9 @@ import {
   useFrameOutput,
   type CameraDevice,
   type CameraOutput,
+  type CameraRef,
   type Frame,
+  type MeteringMode,
 } from 'react-native-vision-camera';
 import {
   createFaceDetector,
@@ -29,6 +33,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { T } from '../components/ui';
 import { setCameraBreadcrumb } from '../lib/crashRecorder';
 import { colors } from '../theme/tokens';
+import { setExposureLock } from './captureNotes';
 import { createTimestampNormalizer } from './timestamps';
 import type { CameraProcessingMode, CameraScannerProps } from './types';
 
@@ -161,6 +166,39 @@ export function CameraScanner({
 
 const NO_OUTPUTS: CameraOutput[] = [];
 
+/**
+ * Auto-exposure and auto-white-balance keep nudging brightness and colour
+ * while the camera runs (seen on a test phone as common-mode steps of 0.5-1%
+ * every few seconds, several times the size of the pulse). After a short
+ * settling time the scan meters on the face area and locks AE/AWB there.
+ * Where a device cannot meter or lock, the scan simply runs unlocked.
+ */
+const EXPOSURE_SETTLE_MS = 1500;
+
+async function lockExposureAndWhiteBalance(
+  camera: CameraRef | null,
+  device: CameraDevice,
+  size: number,
+): Promise<void> {
+  const modes: MeteringMode[] = [];
+  if (device.supportsExposureMetering) modes.push('AE');
+  if (device.supportsWhiteBalanceMetering) modes.push('AWB');
+  if (!camera || modes.length === 0) {
+    setExposureLock('unsupported');
+    return;
+  }
+  try {
+    // Face area: the guide oval is centred slightly above the middle.
+    await camera.focusTo(
+      { x: size / 2, y: size * 0.45 },
+      { modes, adaptiveness: 'locked', autoResetAfter: null },
+    );
+    setExposureLock('locked');
+  } catch {
+    setExposureLock('failed');
+  }
+}
+
 type Callbacks = { current: Pick<CameraScannerProps, 'onFrame' | 'onStatus'> };
 
 interface InnerProps {
@@ -179,8 +217,17 @@ function CameraView({
   size,
   cb,
 }: InnerProps & { outputs: CameraOutput[] }) {
+  const ref = useRef<CameraRef>(null);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (lockTimer.current) clearTimeout(lockTimer.current);
+    },
+    [],
+  );
   return (
     <Camera
+      ref={ref}
       style={{ width: size, height: size }}
       device={device}
       isActive={active}
@@ -190,6 +237,13 @@ function CameraView({
       onStarted={() => {
         setCameraBreadcrumb(mode);
         cb.current.onStatus('running');
+        if (mode === 'full') {
+          setExposureLock('pending');
+          if (lockTimer.current) clearTimeout(lockTimer.current);
+          lockTimer.current = setTimeout(() => {
+            lockExposureAndWhiteBalance(ref.current, device, size).catch(() => undefined);
+          }, EXPOSURE_SETTLE_MS);
+        }
       }}
       onStopped={() => setCameraBreadcrumb(null)}
       onError={(e) => cb.current.onStatus('error', `Camera initialization failed: ${e.message}`)}
@@ -331,11 +385,18 @@ function processFrame(
     }
   }
   let roiBox: FaceBox | null = null;
+  let skinMask: SkinMask | null = null;
   // Smooth the primary box across frames (state lives on this frame-thread
   // runtime). A gap of more than 0.5 s starts fresh.
   if (boxes.length > 0) {
     const g = globalThis as {
-      __evFaceBox?: { box: FaceBox; roiBox: FaceBox; ts: number; scale: number };
+      __evFaceBox?: {
+        box: FaceBox;
+        roiBox: FaceBox;
+        mask: SkinMask;
+        ts: number;
+        scale: number;
+      };
     };
     const ts = frame.timestamp;
     const prevState = g.__evFaceBox;
@@ -345,7 +406,9 @@ function processFrame(
     // The skin sample uses a box held still while the face is still, so the
     // same pixels are averaged every frame; the gates still see `smoothed`.
     roiBox = holdRoiBox(fresh ? prevState.roiBox : null, smoothed);
-    g.__evFaceBox = { box: smoothed, roiBox, ts, scale: TIMESTAMP_SCALE };
+    // A new held box gets a new skin mask, filled on its first frame.
+    skinMask = fresh && prevState.roiBox === roiBox ? prevState.mask : createSkinMask(roiBox);
+    g.__evFaceBox = { box: smoothed, roiBox, mask: skinMask, ts, scale: TIMESTAMP_SCALE };
   }
   const up = uprightSize(frame.width, frame.height, rotation);
   if (mode === 'face') {
@@ -399,6 +462,8 @@ function processFrame(
       roiBox ?? boxes[0]!,
       rotation,
       mirrored,
+      2,
+      roiBox ? skinMask : null,
     );
   }
   scheduleOnRN(deliver, {

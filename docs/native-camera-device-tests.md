@@ -73,7 +73,10 @@ The likely cause is orientation or mirroring. `CameraScanner.tsx` assumes ML Kit
 
 When a scan fails, the results screen opens **Scan details**. Besides the
 summary it offers **Share signal trace**: one line per camera frame with the
-time since the previous frame and the mean skin colour (`dt_ms,r×100,g×100,b×100,usable`).
+time since the previous frame, the mean skin colour and the skin-pixel count
+(trace v3 adds mean ROI luma, face width and r/g/b for the forehead, left cheek
+and right cheek separately). The first line records
+whether auto-exposure and white balance were locked (`exposure_lock=`).
 It holds no images and is only shared when the tester taps the button.
 
 How to read the summary lines:

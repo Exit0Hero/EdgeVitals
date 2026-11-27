@@ -48,6 +48,11 @@ export interface RoiSample {
   luma: number;
   /** Fraction (0-1) of sampled ROI pixels with any channel saturated. */
   clippedFraction: number;
+  /**
+   * Per-region means (forehead, left cheek, right cheek), for diagnostics.
+   * n = skin pixels in that region; r/g/b are 0 when n is 0.
+   */
+  regions?: { r: number; g: number; b: number; n: number }[];
 }
 
 export type FrameQualityFlag =
@@ -146,6 +151,8 @@ export interface SignalStatsDiagnostics {
   bandAmplitudePct: number;
   /** Largest frame-to-frame change of mean green, % (auto-exposure steps show up here). */
   maxStepPct: number;
+  /** POS pulse SNR (dB) of each region alone: forehead, left cheek, right cheek. */
+  regionSnrDb?: (number | null)[];
   /** 10th and 90th percentile of the interval between analysed frames, ms. */
   intervalP10Ms: number;
   intervalP90Ms: number;

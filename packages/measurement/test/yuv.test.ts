@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractRoi, ROI_REGIONS } from '../src/roi';
 import {
+  createSkinMask,
   extractRoiYuv,
   inferPixelStride,
   orientationToRotation,
@@ -159,5 +160,26 @@ describe('YUV ROI extraction', () => {
     expect(holdRoiBox(held, { x: 120, y: 100, width: 200, height: 241 }).x).toBe(120);
     // So does a size change of more than 8%.
     expect(holdRoiBox(held, { x: 90, y: 90, width: 220, height: 264 }).width).toBe(220);
+  });
+
+  it('keeps the same skin pixels once the mask is filled', () => {
+    const frame1 = toBuffer(rgb, 90, false, true, false);
+    const mask = createSkinMask(face);
+    const first = extractRoiYuv(frame1, face, 90, false, 2, mask);
+    expect(mask.ready).toBe(true);
+    // Filling the mask gives the same answer as the per-frame skin test.
+    expect(first).toEqual(extractRoiYuv(frame1, face, 90, false));
+    // Next frame: the left half of the face drifts outside the skin colour range.
+    const shifted = new Uint8ClampedArray(rgb);
+    for (let v = face.y; v < face.y + face.height; v++)
+      for (let u = face.x; u < face.x + face.width / 2; u++)
+        shifted.set([150, 150, 150], (v * W + u) * 4);
+    const frame2 = toBuffer(shifted, 90, false, true, false);
+    const unmasked = extractRoiYuv(frame2, face, 90, false);
+    const masked = extractRoiYuv(frame2, face, 90, false, 2, mask);
+    expect(unmasked.skinPixels).toBeLessThan(first.skinPixels);
+    expect(masked.skinPixels).toBe(first.skinPixels);
+    // Per-region counts add up to the total.
+    expect(first.regions!.reduce((a, r) => a + r.n, 0)).toBe(first.skinPixels);
   });
 });

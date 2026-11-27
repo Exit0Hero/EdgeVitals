@@ -100,9 +100,29 @@ export function inferPixelStride(
 }
 
 /**
+ * Which sampled pixels count as skin, decided once and then reused. With a
+ * per-frame skin test, pixels near the colour threshold drop in and out of
+ * the average as sensor noise and the pulse itself nudge them, which adds
+ * noise to the very signal being measured. Fill it on the first frame of a
+ * held face box (`ready: false`), then pass the same object every frame.
+ */
+export interface SkinMask {
+  bits: Uint8Array;
+  ready: boolean;
+}
+
+/** An empty mask large enough for `face` sampled every `step` pixels. */
+export function createSkinMask(face: FaceBox, step = 2): SkinMask {
+  'worklet';
+  const n = Math.ceil((face.width + 2) / step) * Math.ceil((face.height + 2) / step);
+  return { bits: new Uint8Array(n), ready: false };
+}
+
+/**
  * Average the skin pixels of the forehead and cheeks of `face` (upright
  * coordinates) in a YUV frame. Same regions, skin test and clipping rules as
- * `extractRoi`; only aggregate statistics are returned.
+ * `extractRoi`; only aggregate statistics are returned. With `mask`, skin
+ * membership is decided on the frame that fills it and then kept fixed.
  */
 export function extractRoiYuv(
   frame: YuvFrame,
@@ -110,6 +130,7 @@ export function extractRoiYuv(
   rotation: Rotation,
   mirrored: boolean,
   step = 2,
+  mask: SkinMask | null = null,
 ): RoiSample {
   'worklet';
   // Keep in sync with ROI_REGIONS in roi.ts (checked by tests).
@@ -128,8 +149,16 @@ export function extractRoiYuv(
     skin = 0,
     sampled = 0,
     lumaSum = 0,
-    clipped = 0;
+    clipped = 0,
+    k = 0;
+  const per: { r: number; g: number; b: number; n: number }[] = [];
+  const useMask = mask !== null && mask.ready;
+  const fillMask = mask !== null && !mask.ready;
   for (const reg of regions) {
+    let rr = 0,
+      rg = 0,
+      rb = 0,
+      rn = 0;
     const u0 = Math.max(0, Math.floor(face.x + reg[0]! * face.width));
     const u1 = Math.min(upright.width, Math.ceil(face.x + reg[1]! * face.width));
     const v0 = Math.max(0, Math.floor(face.y + reg[2]! * face.height));
@@ -156,18 +185,32 @@ export function extractRoiYuv(
         lumaSum += 0.299 * r + 0.587 * g + 0.114 * b;
         const clip = r >= 250 || g >= 250 || b >= 250;
         if (clip) clipped++;
-        // Skin test in YCbCr (Chai & Ngan), identical to isSkin() in roi.ts.
-        const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-        const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-        if (!clip && cr >= 133 && cr <= 173 && cb >= 77 && cb <= 127) {
-          sr += r;
-          sg += g;
-          sb += b;
-          skin++;
+        let isSkin: boolean;
+        if (useMask) {
+          isSkin = k < mask.bits.length && mask.bits[k] === 1;
+        } else {
+          // Skin test in YCbCr (Chai & Ngan), identical to isSkin() in roi.ts.
+          const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+          const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+          isSkin = cr >= 133 && cr <= 173 && cb >= 77 && cb <= 127;
+          if (fillMask && k < mask.bits.length) mask.bits[k] = isSkin && !clip ? 1 : 0;
+        }
+        k++;
+        if (!clip && isSkin) {
+          rr += r;
+          rg += g;
+          rb += b;
+          rn++;
         }
       }
     }
+    sr += rr;
+    sg += rg;
+    sb += rb;
+    skin += rn;
+    per.push(rn ? { r: rr / rn, g: rg / rn, b: rb / rn, n: rn } : { r: 0, g: 0, b: 0, n: 0 });
   }
+  if (fillMask) mask.ready = true;
   return {
     r: skin ? sr / skin : 0,
     g: skin ? sg / skin : 0,
@@ -175,6 +218,7 @@ export function extractRoiYuv(
     skinPixels: skin,
     luma: sampled ? lumaSum / sampled : 0,
     clippedFraction: sampled ? clipped / sampled : 0,
+    regions: per,
   };
 }
 
