@@ -40,7 +40,7 @@ export interface MeasurementRecord {
   value: number | null;
   /** Diastolic blood pressure; null for every other metric. */
   valueSecondary?: number | null;
-  /** camera_rppg, demo_fixture or licensed_sdk (ADR 0007). */
+  /** camera_rppg, finger_ppg (ADR 0010), demo_fixture, licensed_sdk (ADR 0007) or camera_experimental. */
   method?: string;
   /** Vendor id for licensed_sdk readings, e.g. "sdk-binah". */
   algorithm?: string;

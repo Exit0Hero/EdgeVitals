@@ -10,3 +10,5 @@ export * from './session';
 export * from './yuv';
 export * from './sdkProvider';
 export * from './experimentalSpo2';
+export * from './finger';
+export * from './motionBreathing';

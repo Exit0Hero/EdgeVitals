@@ -6,6 +6,10 @@ import { colors, space } from '../theme/tokens';
 import { Card, T, TextButton } from './ui';
 
 const FLAG_LABEL: Record<string, string> = {
+  finger_not_detected: 'lens not covered',
+  too_dark: 'too dark',
+  too_bright: 'too bright',
+  finger_moving: 'finger moving',
   face_not_found: 'no face',
   multiple_faces: 'several faces',
   face_out_of_region: 'face outside oval',
@@ -34,6 +38,44 @@ export function describeScan(r: SessionResult): string[] {
     lines.push(
       `Skin pixels per frame: ${c.meanSkinPixels ?? '—'} · brightness: ${c.meanLuma ?? '—'} (of 255)`,
     );
+  }
+  const f = d.finger;
+  if (r.scanType === 'finger' && f) {
+    lines.push(
+      `Finger scan · usable frames ${Math.round(d.usableFrameFraction * 100)}% · clean stretch ${d.usableDurationSec.toFixed(1)} s (15 s for heart rate, 30 s for HRV and breathing)`,
+    );
+    lines.push(
+      `Lens covered: ${f.meanCoverage === null ? '—' : `${Math.round(f.meanCoverage * 100)}%`} of the image · red clipped in ${Math.round(f.redClippedFraction * 100)}% of frames · channel used: ${f.channel ?? 'none'}`,
+    );
+    const c = f.channelSnrDb;
+    lines.push(
+      `Pulse SNR: ${d.hrSnrDb ?? '—'} dB (needs ≥ 6; HRV ≥ 8) · red ${c.r ?? '—'} · green ${c.g ?? '—'} · blue ${c.b ?? '—'}`,
+    );
+    lines.push(
+      `Beats: ${d.ibiCount} intervals, ${d.ibiAcceptedFraction === null ? '—' : `${Math.round(d.ibiAcceptedFraction * 100)}%`} accepted (HR needs ≥ 80%, HRV ≥ 85%) · beat HR ${f.beatMeanHrBpm ?? '—'} bpm · halves differ ${f.halvesDiffBpm ?? '—'} bpm (needs ≤ 5)`,
+    );
+    lines.push(
+      `Beat timing error: ~${f.timingNoiseMs ?? '—'} ms (HRV needs ≤ 4) · pulse strength ${f.pulseStrengthPct ?? '—'}% · SDNN ${f.sdnnMs ?? '—'} ms`,
+    );
+    lines.push(
+      `Breathing signals: ${
+        f.breathing.length
+          ? f.breathing
+              .map(
+                (b) =>
+                  `${b.name === 'riiv' ? 'baseline' : b.name === 'riav' ? 'beat size' : 'beat timing'} ${b.perMin ?? '—'}/min (clarity ${Math.round(b.concentration * 100)}%)`,
+              )
+              .join(' · ')
+          : 'not analysed'
+      } · two clear signals (≥ 50%) must agree within 2/min`,
+    );
+    for (const m of r.metrics) {
+      if (m.metric === 'spo2' || m.metric === 'blood_pressure') continue;
+      lines.push(
+        `${m.metric}: ${m.status === 'valid' ? `${m.value} ${m.unit}` : (m.reason ?? m.status)}`,
+      );
+    }
+    return lines;
   }
   lines.push(
     `Usable frames: ${Math.round(d.usableFrameFraction * 100)}% · longest clean stretch: ${d.usableDurationSec.toFixed(1)} s (15 s needed for heart rate, 30 s for HRV and breathing)`,
@@ -69,10 +111,16 @@ export function describeScan(r: SessionResult): string[] {
       lines.push(`Pulse SNR by area: forehead ${fh} · left cheek ${lc} · right cheek ${rc}`);
     }
   }
+  const mb = d.motionBreathing;
+  if (mb) {
+    lines.push(
+      `Breathing from head movement: ${mb.perMin ?? '—'}/min · clarity ${Math.round(mb.concentration * 100)}% (needs ≥ 55%) · ${Math.round(mb.agreement * mb.windows)} of ${mb.windows} windows agree (needs ≥ 75%) · movement ${mb.amplitudePct}% of face height · ${mb.passed ? 'passed' : 'not used'}`,
+    );
+  }
   for (const m of r.metrics) {
     if (m.metric === 'spo2' || m.metric === 'blood_pressure') continue;
     lines.push(
-      `${m.metric}: ${m.status === 'valid' ? `${m.value} ${m.unit}` : (m.reason ?? m.status)}`,
+      `${m.metric}: ${m.status === 'valid' ? `${m.value} ${m.unit}${m.qualityFlags.includes('head_motion') ? ' (from head movement)' : ''}` : (m.reason ?? m.status)}`,
     );
   }
   return lines;
@@ -135,8 +183,8 @@ export function ScanDetails({
                 testID="scan-trace-share"
               />
               <T variant="small" color={colors.muted}>
-                The signal trace is a text file with the average skin colour of each camera frame.
-                It contains no images, and it is only shared if you tap the button. Send the file
+                The signal trace is a text file with the average colour of each camera frame. It
+                contains no images, and it is only shared if you tap the button. Send the file
                 itself rather than pasting it, so it is not cut off.
               </T>
             </>

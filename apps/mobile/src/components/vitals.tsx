@@ -39,7 +39,9 @@ function display(v: VitalValue): { main: string; unit: string | null; note: stri
             ? 'Wellness estimate'
             : v.method === 'camera_experimental'
               ? 'Experimental'
-              : null,
+              : v.method === 'finger_ppg'
+                ? 'Finger scan'
+                : null,
     };
   }
   const unsupported =
