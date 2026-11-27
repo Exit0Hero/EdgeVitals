@@ -61,6 +61,8 @@ test('onboarding screens have no automatically detectable WCAG A/AA violations',
   await page.getByTestId('next-scan').click();
   await expect(page.getByTestId('screen-prepare')).toBeVisible();
   await check(page, 'prepare');
+  // Finger scan is the default; these checks cover the face scan.
+  await page.getByTestId('scan-type-face').click();
   await page.getByTestId('start-scan').click();
   await expect(page.getByTestId('screen-scan')).toBeVisible();
   await page.waitForTimeout(2000);
