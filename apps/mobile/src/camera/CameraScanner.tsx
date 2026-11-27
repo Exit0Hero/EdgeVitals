@@ -12,7 +12,6 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import {
   Camera,
-  useAsyncRunner,
   useCameraDevice,
   useCameraPermission,
   useFrameOutput,
@@ -207,7 +206,6 @@ function ProcessingCamera({ device, active, mode, size, cb }: InnerProps) {
     () => (mode === 'frames' ? null : createFaceDetector(DETECTOR_OPTIONS)),
     [mode],
   );
-  const runner = useAsyncRunner();
   const normalize = useRef(createTimestampNormalizer());
   const reportedUnsupported = useRef(false);
 
@@ -241,30 +239,29 @@ function ProcessingCamera({ device, active, mode, size, cb }: InnerProps) {
   // Stable worklet: the scan screen rerenders several times a second, and an
   // inline onFrame would re-serialise this closure and re-install the native
   // analyzer on every render while frames are in flight.
+  // Frames are processed synchronously on VisionCamera's frame thread. The
+  // separate async runner (a second worklet runtime that the frame is handed
+  // to) was removed: every stage that used it closed the app on the iQOO
+  // test phone, and CameraX already drops late frames for us
+  // (dropFramesWhileBusy), so it bought nothing.
+  // Stable worklet: the scan screen rerenders several times a second, and an
+  // inline onFrame would re-serialise this closure on every render.
   const onFrame = useMemo(
     () => (frame: Frame) => {
       'worklet';
-      let handled = false;
       try {
-        handled = runner.runAsync(() => {
-          'worklet';
-          try {
-            processFrame(frame, mode, detector, deliver);
-          } catch (e) {
-            scheduleOnRN(fail, `Frame processing failed: ${String(e)}`);
-          } finally {
-            try {
-              frame.dispose();
-            } catch {
-              /* already released */
-            }
-          }
-        });
+        processFrame(frame, mode, detector, deliver);
+      } catch (e) {
+        scheduleOnRN(fail, `Frame processing failed: ${String(e)}`);
       } finally {
-        if (!handled) frame.dispose(); // still busy with the previous frame, or scheduling failed
+        try {
+          frame.dispose();
+        } catch {
+          /* already released */
+        }
       }
     },
-    [runner, mode, detector, deliver, fail],
+    [mode, detector, deliver, fail],
   );
 
   const frameOutput = useFrameOutput({
@@ -283,7 +280,7 @@ function ProcessingCamera({ device, active, mode, size, cb }: InnerProps) {
 
 type Detector = ReturnType<typeof createFaceDetector>;
 
-/** Runs on the async frame-processor runtime. Never retains the frame or its buffers. */
+/** Runs on the frame-processor runtime. Never retains the frame or its buffers. */
 function processFrame(
   frame: Frame,
   mode: CameraProcessingMode,

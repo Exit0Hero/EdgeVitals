@@ -8,8 +8,10 @@ import { File, Paths } from 'expo-file-system';
  * React Native as fatal). Testers rarely have adb, so we write the error to a
  * small local file before the app closes and show it on the next launch.
  *
- * A native crash (C++/Kotlin) kills the process before any JavaScript runs,
- * so it cannot be recorded here. For that case the camera writes a
+ * Uncaught Java/Kotlin exceptions are written to the same file by a small
+ * handler installed in MainApplication (plugins/withJavaCrashRecorder.js).
+ * A C++ crash kills the process before anything can run, so for that case
+ * (and any other silent exit) the camera writes a
  * breadcrumb while it runs and removes it when it stops cleanly: a breadcrumb
  * that is still present at the next launch means the app closed while that
  * camera stage was running.
@@ -20,7 +22,8 @@ import { File, Paths } from 'expo-file-system';
  */
 
 export interface CrashReport {
-  kind: 'js_error' | 'closed_during_camera';
+  /** native_error is written by the Java handler in plugins/withJavaCrashRecorder.js. */
+  kind: 'js_error' | 'native_error' | 'closed_during_camera';
   at: string;
   message: string;
   stack?: string;
