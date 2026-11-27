@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.edgevitals.app",
+      "config": { "usesNonExemptEncryption": false },
       "infoPlist": {
         "NSCameraUsageDescription": "EdgeVitals uses the front camera during a scan to estimate heart rate, HRV and breathing from subtle colour changes in your face. Video is processed on your device and never stored or uploaded.",
         "NSHealthShareUsageDescription": "If you turn on health app sync, EdgeVitals reads oxygen saturation and blood pressure that your own devices saved to Apple Health, and shows them labelled with their source. It never writes to Apple Health."

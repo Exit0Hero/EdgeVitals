@@ -149,7 +149,10 @@ provider, which hasn't been chosen. Add a push-to-registry job once it has.
 ## 7. Mobile release builds
 
 `apps/mobile/eas.json` defines `development`, `preview` and `production` profiles. Set
-`EXPO_PUBLIC_API_URL` per profile to the real API URL before building. Store signing
+`EXPO_PUBLIC_API_URL` per profile to the real API URL before building. A native release build
+whose URL is still the `REPLACE-WITH-…` placeholder, plain http or a development host opens on a
+"This build can't connect" screen instead of failing every request
+(`apps/mobile/src/lib/releaseConfig.ts`). Store signing
 credentials in EAS, never in the repository. Native camera support must pass the device test
 plan (`docs/native-camera-device-tests.md`) before a store release.
 
