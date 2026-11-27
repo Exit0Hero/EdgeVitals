@@ -7,6 +7,9 @@ import type {
   RelativeStatus,
   TrendSeries,
 } from '@edgevitals/domain';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+import { consentSource } from '../lib/releaseConfig';
 import { tokenStore } from '../lib/secureStore';
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000').replace(
@@ -316,7 +319,7 @@ export const api = {
       consent_type,
       granted,
       policy_version,
-      source: 'mobile-app',
+      source: consentSource(Constants.expoConfig?.version, Platform.OS),
     }),
   withdrawConsent: (id: string) => client.request('POST', `/api/v1/me/consents/${id}/withdraw`),
   saveProfile: (p: NonNullable<Me['profile']>) => client.request('PATCH', '/api/v1/me/profile', p),
