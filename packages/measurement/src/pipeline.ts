@@ -80,7 +80,7 @@ export function longestUsableSegment(frames: FrameSample[]): FrameSample[] {
   for (const f of frames) {
     if (!f.usable || !f.roi) continue;
     const last = cur[cur.length - 1];
-    if (last && (f.t - last.t) / 1000 > cfg.maxGapSec) {
+    if (last && ((f.t - last.t) / 1000 > cfg.maxGapSec || isColourStep(last, f))) {
       if (cur.length > best.length) best = cur;
       cur = [];
     }
@@ -88,6 +88,19 @@ export function longestUsableSegment(frames: FrameSample[]): FrameSample[] {
   }
   if (cur.length > best.length) best = cur;
   return best;
+}
+
+/**
+ * A jump in mean skin colour far larger than any pulse (<1%) between two
+ * analysed frames: auto-exposure or white balance still settling (phones
+ * ramp brightness by 5-17% per frame for the first second), or a lighting
+ * change. The signal is split there instead of analysed across the step.
+ */
+function isColourStep(a: FrameSample, b: FrameSample): boolean {
+  const x = a.roi!;
+  const y = b.roi!;
+  const rel = (p: number, q: number) => (p > 0 ? Math.abs(q - p) / p : 0);
+  return Math.max(rel(x.r, y.r), rel(x.g, y.g), rel(x.b, y.b)) > cfg.maxColourStep;
 }
 
 function segDuration(seg: FrameSample[]): number {
