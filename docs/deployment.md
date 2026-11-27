@@ -45,8 +45,11 @@ launch checklist below includes the non-technical items that gate a public relea
   its own transaction, and recorded with a checksum in `schema_migrations`. Editing an applied
   file is refused: add a new numbered file instead.
 - A Postgres advisory lock serialises concurrent runs, so two replicas starting together are safe.
-- **Recommended release flow:** run the image once as a release job with the new version, then
-  roll out the API with `MIGRATE_ON_START=false`:
+- **Default:** `MIGRATE_ON_START=true` applies pending migrations before the server listens;
+  a failure exits the process, so the platform keeps the previous version. Render staging uses
+  this because free services have no release step.
+- **Hosts with a release / pre-deploy step:** run the image once as a release job with the new
+  version, then roll out the API with `MIGRATE_ON_START=false`:
 
   ```sh
   docker run --rm -e DATABASE_URL=… edgevitals-api node dist/migrate.js
@@ -55,7 +58,9 @@ launch checklist below includes the non-technical items that gate a public relea
   It exits non-zero on failure, so the platform stops the rollout.
 
 - Write migrations to be backward compatible with the previous API version (add columns
-  nullable, backfill, then tighten in a later release). There are no down migrations: roll
+  nullable, backfill, then tighten in a later release). `apps/api/test/migration-safety.test.ts`
+  fails CI on drops, renames, truncates, deletes and NOT NULL/TYPE changes unless the file has a
+  `-- destructive: <reason>` line, which should come with a backup and a release plan. There are no down migrations: roll
   back by deploying a forward fix.
 - Backups: enable daily automated backups with point-in-time recovery, encrypted, and retention
   matching the privacy policy (account deletion removes live data immediately; backups age out
@@ -153,7 +158,7 @@ plan (`docs/native-camera-device-tests.md`) before a store release.
 - [ ] Managed Postgres with TLS, encryption at rest, PITR backups; `HOSTING_REGION` verified.
 - [ ] Secrets in the platform's secret store; `JWT_SECRET` generated fresh for production.
 - [ ] `NODE_ENV=production`, `DEMO_MODE_ENABLED=false`, https-only `CORS_ORIGINS`.
-- [ ] Migration release job wired before rollout; `MIGRATE_ON_START=false`.
+- [ ] Migrations applied before traffic: release job with `MIGRATE_ON_START=false`, or migrate-on-start.
 - [ ] Readiness probe on `/ready`, termination grace ≥ 15 s, at least two replicas.
 - [ ] Web served with the headers above over HTTPS (HSTS is on).
 - [ ] Open items from `docs/security-accessibility-review.md`, especially password reset.

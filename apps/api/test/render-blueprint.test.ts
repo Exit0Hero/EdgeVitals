@@ -83,7 +83,7 @@ describe('render.yaml (staging Blueprint)', () => {
   it('sets production values that the API config accepts', () => {
     expect(env('NODE_ENV')?.value).toBe('production');
     expect(env('DEMO_MODE_ENABLED')?.value).toBe('false');
-    expect(env('MIGRATE_ON_START')?.value).toBe('false');
+    expect(env('MIGRATE_ON_START')?.value).toBe('true');
     expect(env('HOSTING_REGION')?.value).toBe('Singapore');
     expect(env('PORT')?.value).toBe('10000');
 
@@ -97,7 +97,7 @@ describe('render.yaml (staging Blueprint)', () => {
     expect(config).toMatchObject({
       isProduction: true,
       demoModeEnabled: false,
-      migrateOnStart: false,
+      migrateOnStart: true,
       hostingRegion: 'Singapore',
       port: 10000,
       corsOrigins: [],

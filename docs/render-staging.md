@@ -27,17 +27,19 @@ Staging is wellness test data only. Don't use it for anyone's real health data.
 
 Sources: [render.com/docs/free](https://render.com/docs/free), [Blueprint spec](https://render.com/docs/blueprint-spec), [environment variables](https://render.com/docs/environment-variables) and [Postgres connections](https://render.com/docs/postgresql-creating-connecting).
 
-## How migrations run, exactly once per schema change
+## How migrations run
 
-- `MIGRATE_ON_START=false`, so the API never migrates when it starts or restarts.
-- `/ready`, Render's health check, returns 503 with `migrations_pending` until **every** migration in the deployed build is applied. So a deploy can't go live on an out-of-date schema. Render keeps the previous version live, or on the very first deploy marks it failed.
-- The migration itself is the manual **Migrate staging database** workflow. It runs `npm run migrate` (`apps/api/src/migrate-cli.ts`, the same code as `node dist/migrate.js`) against the database's External URL over TLS.
-- Safety properties:
-  - Already-applied files are skipped.
+- `MIGRATE_ON_START=true`: each new API version applies any pending migrations **before it starts listening**, over Render's private network. Nobody has to open the database or run a workflow.
+- If a migration fails, the process exits, the deploy is marked failed and Render keeps the previous version live. The deploy log shows the error.
+- `/ready`, Render's health check, still returns 503 with `migrations_pending` if the schema is behind the build, so a deploy can never go live on an out-of-date schema.
+- Safety properties (`apps/api/src/migrate.ts`):
+  - Already-applied files are skipped, so restarts are no-ops.
   - Each file runs in its own transaction.
   - An advisory lock stops two runs from overlapping.
   - Editing an applied file is refused.
-- The database blocks all external connections (`ipAllowList: []`). You open it only for the few minutes the workflow runs, because GitHub's runners have no fixed IP addresses.
+- While the new version migrates, the old one is still serving, so migrations must stay backward compatible (add tables, nullable columns, widen constraints). `apps/api/test/migration-safety.test.ts` fails CI on drops, renames, truncates and similar steps unless the file carries a `-- destructive: …` note for review.
+- The database blocks all external connections (`ipAllowList: []`). That doesn't affect the API, which connects internally.
+- The manual **Migrate staging database** workflow stays as a fallback (see "Running migrations by hand").
 
 ## First-time setup (after the PR is merged)
 
@@ -46,48 +48,39 @@ Sources: [render.com/docs/free](https://render.com/docs/free), [Blueprint spec](
    - Pick `Exit0Hero/EdgeVitals`, branch `main`. The Blueprint file is `render.yaml`.
    - Check that the plan list shows **Free** for both resources and the region is **Singapore**.
    - Choose **Apply**. Render shouldn't ask you for any values.
-2. **Expect the first API deploy to fail.**
-   - The database is created empty, so `/ready` answers `migrations_pending`.
-   - This is intended. Wait until the database shows **Available**.
-3. **Store the database URL in GitHub.**
-   - In Render, open `edgevitals-staging-db` → **Connect** and copy the **External Database URL**.
-   - In GitHub, go to **Settings → Secrets and variables → Actions → New repository secret**. Name it `STAGING_DATABASE_URL` and paste the URL.
-4. **Open the database briefly.**
-   - In Render, go to `edgevitals-staging-db` → **Networking** (access control).
-   - Add source `0.0.0.0/0` with the description `temporary: migration`.
-   - Connections still need the password and TLS.
-5. **Run the migration.**
-   - In GitHub, go to **Actions → Migrate staging database → Run workflow**.
-   - Choose branch `main` and type `MIGRATE`.
-   - The log should end with `applied 1 migration(s)`, or `schema up to date` on a re-run.
-6. **Close the database again.** Remove the `0.0.0.0/0` entry so the allow list is empty.
-7. **Deploy the API.**
-   - In Render, open `edgevitals-staging-api` → **Manual Deploy → Deploy latest commit**.
-   - Wait for **Live**.
-8. **Verify.**
+2. **Wait for the first deploy.** The API waits for the database, applies every migration on start (the log shows `applied 001_init.sql` and so on) and goes **Live**. If the database wasn't ready yet the first attempt can fail: choose **Manual Deploy → Deploy latest commit** once it shows **Available**.
+3. **Verify.**
    - Copy the service URL shown at the top of the service page. It is an `https://…onrender.com` address that Render assigns.
    - `https://<service URL>/ready` should return `{"ok":true}`.
    - `https://<service URL>/api/v1/config` should return `{"hosting_region":"Singapore","demo_mode_enabled":false}`.
-9. **Use it for phone builds.** Paste the service URL, with no trailing slash, into the `api_url` field of **Actions → Build test app**.
+4. **Use it for phone builds.** Paste the service URL, with no trailing slash, into the `api_url` field of **Actions → Build test app**.
 
 ## Later schema changes
 
-When a PR adds a file to `apps/api/migrations/`:
+Nothing to do. Merge the PR; Render deploys it after CI passes (`autoDeployTrigger: checksPass`) and the new version applies its migrations as it starts.
 
-1. Merge it. Render deploys it after CI passes (`autoDeployTrigger: checksPass`).
-2. The new deploy stays unhealthy, and the old version keeps serving, until you repeat steps 4 to 6.
-3. Then redeploy (step 7).
+**If you created the Blueprint before this change**, check once that `edgevitals-staging-api` → **Environment** shows `MIGRATE_ON_START` = `true`. Blueprint sync normally updates it; if it still says `false`, change it to `true` and save (Render redeploys).
+
+## Running migrations by hand (fallback)
+
+Only needed if a deploy keeps failing and you want to apply migrations without deploying, or `MIGRATE_ON_START` is `false`:
+
+1. In Render, open `edgevitals-staging-db` → **Connect** and copy the **External Database URL**. Store it as the GitHub secret `STAGING_DATABASE_URL` (**Settings → Secrets and variables → Actions**).
+2. In Render, go to `edgevitals-staging-db` → **Networking** and add source `0.0.0.0/0` with the description `temporary: migration`. Connections still need the password and TLS.
+3. In GitHub, run **Actions → Migrate staging database** on branch `main` and type `MIGRATE`. The log ends with `applied N migration(s)` or `schema up to date`.
+4. Remove the `0.0.0.0/0` entry again.
+5. In Render, open `edgevitals-staging-api` → **Manual Deploy → Deploy latest commit**.
 
 ## Every 30 days (free Postgres expiry)
 
 1. Before day 30, export anything you need. Free databases have no backups.
 2. In Render, delete the expired database, then open the Blueprint and choose **Manual sync**. Render recreates `edgevitals-staging-db` from `render.yaml`.
-3. Repeat steps 3 to 8. The External URL changes, so update the `STAGING_DATABASE_URL` secret.
+3. Redeploy the API (**Manual Deploy → Deploy latest commit**) so it migrates the new database, then repeat the checks in step 3 of the first-time setup. If you use the fallback workflow, update the `STAGING_DATABASE_URL` secret, because the External URL changes.
 
 The API URL stays the same. All staging accounts and data are gone, so re-register on the test phones.
 
 ## Not verified yet
 
 - Render's build of `apps/api/Dockerfile` hasn't been run. The image builds and runs with Docker locally and in CI, and the optional build-secret mount (`--mount=type=secret,required=false`) is standard BuildKit syntax.
-- The migration workflow's TLS connection to Render (`sslmode=require`) hasn't been exercised, because no database exists yet.
+- The fallback workflow's TLS connection to Render (`sslmode=require`) hasn't been exercised.
 - If either fails, the workflow or deploy log will show it, and nothing else is affected.
