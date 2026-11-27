@@ -167,7 +167,7 @@ export const measurementSchema = z
     quality_score: z.number().min(0).max(1).nullable(),
     quality_flags: z.array(z.string().max(40)).max(20),
     reason: z.string().max(40).nullable(),
-    method: z.enum(['camera_rppg', 'demo_fixture', 'licensed_sdk']),
+    method: z.enum(['camera_rppg', 'demo_fixture', 'licensed_sdk', 'camera_experimental']),
     algorithm_name: z.string().min(1).max(60),
     algorithm_version: z.string().regex(/^\d+\.\d+\.\d+$/),
     config_version: z.string().min(1).max(60),
@@ -214,10 +214,19 @@ export const measurementSchema = z
     // SpO2 and blood pressure have no EdgeVitals camera method (ADR 0004). They
     // are accepted only from a licensed SDK, which may report nothing else (ADR 0007).
     const sdkMetric = m.metric === 'spo2' || m.metric === 'blood_pressure';
-    if (sdkMetric && m.status === 'valid' && m.method !== 'licensed_sdk')
+    // Experimental camera SpO2 (ADR 0008) is the only opt-in research estimator.
+    const allowedValid =
+      m.method === 'licensed_sdk' || (m.metric === 'spo2' && m.method === 'camera_experimental');
+    if (sdkMetric && m.status === 'valid' && !allowedValid)
       ctx.addIssue({
         code: 'custom',
-        message: `${m.metric} is only accepted from a licensed SDK`,
+        message: `${m.metric} is only accepted from a licensed SDK or the experimental SpO2 estimator`,
+        path: ['method'],
+      });
+    if (m.method === 'camera_experimental' && m.metric !== 'spo2')
+      ctx.addIssue({
+        code: 'custom',
+        message: 'experimental camera estimates are only accepted for spo2',
         path: ['method'],
       });
     if (!sdkMetric && m.method === 'licensed_sdk')

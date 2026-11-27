@@ -23,6 +23,7 @@ import {
   type ReminderPermission,
 } from '../../lib/reminders';
 import { saveExport } from '../../lib/saveExport';
+import { getExperimentalSpo2, setExperimentalSpo2 } from '../../lib/experimental';
 import { useSession } from '../../state/session';
 import { colors, space } from '../../theme/tokens';
 
@@ -52,6 +53,10 @@ export default function Settings() {
   const [confirmDelete, setConfirmDelete] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [notif, setNotif] = useState<ReminderPermission>('undetermined');
+  const [experimental, setExperimental] = useState<'off' | 'on'>('off');
+  useEffect(() => {
+    getExperimentalSpo2().then((on) => setExperimental(on ? 'on' : 'off'));
+  }, []);
   useEffect(() => {
     reminderPermission()
       .then(setNotif)
@@ -276,6 +281,31 @@ export default function Settings() {
           />
         </Section>
       ) : null}
+
+      <Section title="Experimental estimates">
+        <T variant="body" color={colors.textSecondary} style={{ marginBottom: space[3] }}>
+          Adds an experimental oxygen saturation (SpO₂) estimate to your scans. It uses a published
+          research method (Bal, 2015) that compares red and blue colour changes in your face.
+          EdgeVitals has not validated it, it can be off by several points, and it can miss low
+          oxygen. Do not use it for health decisions. Use a pulse oximeter if you are unwell.
+        </T>
+        <Segmented
+          label="Experimental SpO₂ estimate"
+          testID="experimental-spo2"
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+          value={experimental}
+          onChange={(v) => {
+            setExperimental(v);
+            setExperimentalSpo2(v === 'on').catch(() => setExperimental(v === 'on' ? 'off' : 'on'));
+          }}
+        />
+        <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
+          Blood pressure is not available from the camera.
+        </T>
+      </Section>
 
       <Section title="Privacy and consent">
         {consentRow('processing', 'Process my readings for wellness insights', true)}

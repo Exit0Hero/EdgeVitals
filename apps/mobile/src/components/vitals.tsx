@@ -37,11 +37,15 @@ function display(v: VitalValue): { main: string; unit: string | null; note: stri
           ? 'Demo data'
           : v.method === 'licensed_sdk'
             ? 'Wellness estimate'
-            : null,
+            : v.method === 'camera_experimental'
+              ? 'Experimental'
+              : null,
     };
   }
   const unsupported =
-    (v.metric === 'spo2' || v.metric === 'blood_pressure') && v.method !== 'licensed_sdk';
+    (v.metric === 'spo2' || v.metric === 'blood_pressure') &&
+    v.method !== 'licensed_sdk' &&
+    v.method !== 'camera_experimental';
   return {
     main: '—',
     unit: null,
@@ -141,6 +145,8 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
                 <StatusPill label="Demo" tone="muted" />
               ) : d.note === 'Wellness estimate' ? (
                 <StatusPill label="Estimate" tone="muted" />
+              ) : d.note === 'Experimental' ? (
+                <StatusPill label="Experimental" tone="warning" />
               ) : rel && d.main !== '—' ? (
                 <StatusPill label={rel.label} tone={rel.tone} />
               ) : null}

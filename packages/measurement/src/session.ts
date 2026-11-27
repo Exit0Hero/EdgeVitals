@@ -55,6 +55,8 @@ export class ScanSession {
   constructor(
     private readonly targetUsableSec: number = PIPELINE_CONFIG.targetUsableSec,
     private readonly maxScanSec: number = PIPELINE_CONFIG.maxScanSec,
+    /** Opt-in experimental estimators (ADR 0008). */
+    private readonly experimental: { spo2?: boolean } = {},
   ) {}
 
   get frameCount(): number {
@@ -139,7 +141,11 @@ export class ScanSession {
     if (this.interimHr !== null) metrics.heart_rate = 'available';
     if (this.interimHrv !== null) metrics.hrv = 'available';
     if (this.interimBreathing !== null) metrics.breathing_rate = 'available';
-    metrics.spo2 = 'unavailable';
+    metrics.spo2 = this.experimental.spo2
+      ? usableSec > 0
+        ? 'measuring'
+        : 'pending'
+      : 'unavailable';
     metrics.blood_pressure = 'unavailable';
 
     return {
@@ -170,7 +176,7 @@ export class ScanSession {
   }
 
   finish(): SessionResult {
-    const result = analyzeSession(this.frames);
+    const result = analyzeSession(this.frames, { experimentalSpo2: !!this.experimental.spo2 });
     this.clear();
     return result;
   }

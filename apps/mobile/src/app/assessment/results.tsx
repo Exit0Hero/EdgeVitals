@@ -69,6 +69,9 @@ export default function Results() {
   }));
   const validCount = a.measurements.filter((m) => m.status === 'valid').length;
   const sdkVitals = a.measurements.some((m) => m.method === 'licensed_sdk' && m.status === 'valid');
+  const experimentalSpo2 = a.measurements.some(
+    (m) => m.method === 'camera_experimental' && m.status === 'valid',
+  );
   const failed = a.status === 'failed';
   const isToday = dash.today[a.kind]?.assessment_id === a.id;
   const scores = isToday && !a.demo ? dash.scores : null;
@@ -228,7 +231,9 @@ export default function Results() {
         estimates that have not been clinically validated.{' '}
         {sdkVitals
           ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
-          : 'SpO₂ and blood pressure are not available from the camera on this device.'}{' '}
+          : experimentalSpo2
+            ? 'SpO₂ is an experimental estimate from a published research method that EdgeVitals has not validated. It can be off by several points and can miss low oxygen, so do not use it for health decisions. Blood pressure is not available from the camera.'
+            : 'SpO₂ and blood pressure are not available from the camera on this device.'}{' '}
         If readings stay higher than usual, consider talking to a health professional.
       </T>
     </Screen>

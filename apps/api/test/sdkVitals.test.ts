@@ -86,6 +86,28 @@ describe('licensed SDK vitals (ADR 0007)', () => {
     }
   });
 
+  it('stores experimental camera SpO2 (ADR 0008) without changing the outcome', async () => {
+    const u = await registerUser(ctx.app);
+    await onboard(ctx.app, u);
+    const res = await submit(u, [
+      measurement('heart_rate', 61),
+      measurement('hrv', null),
+      measurement('breathing_rate', null),
+      {
+        ...measurement('spo2', 97),
+        method: 'camera_experimental',
+        algorithm_name: 'bal2015-ror-red-blue',
+        quality_flags: ['experimental'],
+      },
+    ]);
+    expect(res.statusCode).toBe(201);
+    expect(res.json().status).toBe('partial');
+    const d = (await ctx.app.inject({ url: '/api/v1/dashboard/today', headers: u.auth })).json();
+    expect(
+      d.last_assessment.metrics.find((m: { metric: string }) => m.metric === 'spo2'),
+    ).toMatchObject({ value: 97, method: 'camera_experimental' });
+  });
+
   it('enforces the same rules in the database', async () => {
     const u = await registerUser(ctx.app);
     await onboard(ctx.app, u);
@@ -109,6 +131,10 @@ describe('licensed SDK vitals (ADR 0007)', () => {
     await expect(insert('blood_pressure', 'mmHg', 120, null, 'licensed_sdk')).rejects.toThrow(
       /check/,
     );
+    await expect(insert('blood_pressure', 'mmHg', 120, 80, 'camera_experimental')).rejects.toThrow(
+      /check/,
+    );
+    await expect(insert('hrv', 'ms', 40, null, 'camera_experimental')).rejects.toThrow(/check/);
     await expect(insert('spo2', '%', 97, null, 'licensed_sdk')).resolves.toBeDefined();
   });
 });

@@ -9,3 +9,4 @@ export * from './pipeline';
 export * from './session';
 export * from './yuv';
 export * from './sdkProvider';
+export * from './experimentalSpo2';

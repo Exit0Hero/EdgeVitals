@@ -2,6 +2,7 @@ import { ALGORITHM_NAME, CONFIG_VERSION, PIPELINE_CONFIG, PIPELINE_VERSION } fro
 import { mean, median, resampleUniform } from './dsp';
 import { estimateBreathing, estimateHeartRate, estimateHrv } from './estimators';
 import { pos } from './pos';
+import { EXPERIMENTAL_SPO2, estimateExperimentalSpo2 } from './experimentalSpo2';
 import type {
   CaptureDiagnostics,
   FrameSample,
@@ -137,24 +138,40 @@ function captureDiagnostics(frames: FrameSample[], medianIntervalMs: number): Ca
  * Run the full rPPG analysis over captured frame samples and return one
  * result per metric. Each metric passes or abstains independently.
  */
-export function analyzeSession(
-  frames: FrameSample[],
-  opts: { cancelled?: boolean } = {},
-): SessionResult {
+export interface AnalyzeOptions {
+  cancelled?: boolean;
+  /** Opt-in experimental SpO2 (ADR 0008). Off by default. */
+  experimentalSpo2?: boolean;
+}
+
+const EXPERIMENTAL_PROVENANCE: MetricProvenance = {
+  method: 'camera_experimental',
+  algorithm: EXPERIMENTAL_SPO2.algorithm,
+  version: EXPERIMENTAL_SPO2.version,
+  source: 'measured',
+  validation: 'unvalidated',
+};
+
+function experimentalUnavailable(reason: UnavailableReason, flags: string[]): MetricResult {
+  return {
+    ...unavailable('spo2', reason, ['experimental', ...flags]),
+    provenance: EXPERIMENTAL_PROVENANCE,
+  };
+}
+
+export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {}): SessionResult {
   const base = { pipelineVersion: PIPELINE_VERSION, configVersion: CONFIG_VERSION };
   const seg = longestUsableSegment(frames);
   const diagnostics = computeDiagnostics(frames, seg);
-  const unsupported = [
-    unavailable('spo2', 'unsupported_method'),
-    unavailable('blood_pressure', 'unsupported_method'),
-  ];
+  let spo2Result: MetricResult = unavailable('spo2', 'unsupported_method');
+  const unsupported = () => [spo2Result, unavailable('blood_pressure', 'unsupported_method')];
 
   if (opts.cancelled) {
     return {
       ...base,
       outcome: 'cancelled',
       diagnostics,
-      metrics: [...SUPPORTED_METRICS.map((m) => unavailable(m, 'cancelled')), ...unsupported],
+      metrics: [...SUPPORTED_METRICS.map((m) => unavailable(m, 'cancelled')), ...unsupported()],
     };
   }
 
@@ -164,6 +181,8 @@ export function analyzeSession(
 
   if (dur < cfg.minHrDurationSec) {
     for (const m of SUPPORTED_METRICS) results.set(m, unavailable(m, 'insufficient_duration'));
+    if (opts.experimentalSpo2)
+      spo2Result = experimentalUnavailable('insufficient_duration', ['too_short']);
   } else {
     const t = seg.map((f) => f.t / 1000);
     const r = resampleUniform(
@@ -209,8 +228,36 @@ export function analyzeSession(
     diagnostics.ibiAcceptedFraction = beats ? round(beats.acceptedFraction, 3) : null;
     if (!hr || !hrOk) {
       for (const m of SUPPORTED_METRICS) results.set(m, unavailable(m, 'low_signal_quality'));
+      if (opts.experimentalSpo2)
+        spo2Result = experimentalUnavailable('low_signal_quality', ['heart_rate_gate']);
     } else {
-      const hrQuality = 0.5 + 0.5 * Math.min(1, Math.max(0, (hr.snrDb - cfg.minHrSnrDb) / 8));
+      if (opts.experimentalSpo2) {
+        const s = estimateExperimentalSpo2(r, b, hr.pulse, fs);
+        diagnostics.experimentalSpo2 = {
+          ratio: s.ratio === null ? null : round(s.ratio, 4),
+          acceptedFraction: round(s.acceptedFraction, 3),
+          iqr: s.iqr === null ? null : round(s.iqr, 2),
+          failure: s.failure,
+        };
+        spo2Result =
+          s.value !== null
+            ? {
+                ...valid('spo2', s.value, hrQualityFor(hr.snrDb) * s.acceptedFraction, [
+                  'experimental',
+                ]),
+                provenance: EXPERIMENTAL_PROVENANCE,
+              }
+            : s.failure === 'out_of_range'
+              ? {
+                  ...experimentalUnavailable('out_of_operating_range', ['out_of_range']),
+                  status: 'invalid',
+                }
+              : experimentalUnavailable(
+                  s.failure === 'too_short' ? 'insufficient_duration' : 'low_signal_quality',
+                  [s.failure ?? 'weak_pulse'],
+                );
+      }
+      const hrQuality = hrQualityFor(hr.snrDb);
       results.set('heart_rate', valid('heart_rate', round(hr.bpm, 0), hrQuality));
 
       // HRV
@@ -256,11 +303,16 @@ export function analyzeSession(
     }
   }
 
-  const metrics = [...SUPPORTED_METRICS.map((m) => results.get(m)!), ...unsupported];
-  const validCount = metrics.filter((m) => m.status === 'valid').length;
+  const metrics = [...SUPPORTED_METRICS.map((m) => results.get(m)!), ...unsupported()];
+  // Outcome depends only on the pipeline's own metrics, never on experimental or SDK ones.
+  const validCount = SUPPORTED_METRICS.filter((m) => results.get(m)!.status === 'valid').length;
   const outcome: SessionOutcome =
     validCount === SUPPORTED_METRICS.length ? 'completed' : validCount > 0 ? 'partial' : 'failed';
   return { ...base, outcome, metrics, diagnostics };
+}
+
+function hrQualityFor(snrDb: number): number {
+  return 0.5 + 0.5 * Math.min(1, Math.max(0, (snrDb - cfg.minHrSnrDb) / 8));
 }
 
 function round(v: number, dp: number): number {
