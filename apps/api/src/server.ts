@@ -5,9 +5,10 @@ import { migrate } from './migrate';
 
 const config = loadConfig();
 const db = createPool(config.databaseUrl);
-// Migrations take an advisory lock, so concurrent replicas are safe. Production
-// deployments should still run them as a separate release step
-// (`node dist/migrate.js`) and set MIGRATE_ON_START=false; see docs/deployment.md.
+// Migrations take an advisory lock, so concurrent replicas are safe, and a
+// failure exits before the server listens (the platform keeps the old version).
+// Hosts with a release/pre-deploy step can run `node dist/migrate.js` there and
+// set MIGRATE_ON_START=false instead; see docs/deployment.md.
 if (config.migrateOnStart) await migrate(config.databaseUrl, (m) => console.log(m));
 const app = await buildApp(config, db, { logger: true });
 await app.listen({ port: config.port, host: config.host });

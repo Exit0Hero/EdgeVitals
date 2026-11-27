@@ -51,11 +51,4 @@ Docker images, environment variables, migrations, hosting headers and the launch
 
 Staging runs on Render's free tier (`render.yaml`, Singapore): `docs/render-staging.md`.
 
-> **Ops note: PRs that add a migration.** The API never migrates on start, and `/ready` returns 503 until every migration is applied, so after merging a PR that adds a file to `apps/api/migrations/` the new staging deploy stays unhealthy. To finish it:
->
-> 1. Temporarily allow `0.0.0.0/0` on the staging database in Render (Networking).
-> 2. Run **Actions → Migrate staging database** on `main` and type `MIGRATE`.
-> 3. Remove the temporary allow-list entry.
-> 4. In Render, open `edgevitals-staging-api` → **Manual Deploy → Deploy latest commit**.
->
-> Full steps: `docs/render-staging.md` ("Later schema changes").
+> **Ops note: PRs that add a migration.** Nothing manual is needed any more: the staging API applies pending migrations when the new version starts (`MIGRATE_ON_START=true`), and a failed migration leaves the previous version serving. Migrations must stay backward compatible; CI checks this. Details and the manual fallback: `docs/render-staging.md`.

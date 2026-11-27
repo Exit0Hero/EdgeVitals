@@ -1,4 +1,5 @@
-# One-time (per schema change) migration of the Render STAGING database.
+# FALLBACK manual migration of the Render STAGING database. The staging API
+# normally migrates itself on start (MIGRATE_ON_START=true in render.yaml).
 # Free Render web services have no pre-deploy command or shell, so migrations
 # run from here against the database's External URL. Steps and the temporary
 # IP allow-list change it needs: docs/render-staging.md.
