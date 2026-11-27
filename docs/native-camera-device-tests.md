@@ -46,3 +46,24 @@ Record results in a copy of this table per device and attach it to the PR that c
 ## If check 5 fails
 
 The likely cause is orientation or mirroring. `CameraScanner.tsx` assumes ML Kit reports boxes in the upright image, mirrored on iOS and not on Android. Log `frame.orientation`, `frame.isMirrored`, `frame.width/height` and the face's `frameWidth/frameHeight` and compare with `uprightToBuffer` in `yuv.ts`.
+
+## If the app closes when the camera opens
+
+1. Open the app again. If a "The app closed unexpectedly last time" card appears,
+   tap **Share details** and send the text. It names the camera stage that was
+   running and, for JavaScript errors, the exact error. It contains no images
+   or health data.
+2. Find the failing stage: on the scan screen try, one at a time, **Test camera
+   preview only**, **Test frame output**, **Test face detection**, then
+   **Start measurements**. Note the first one that closes the app.
+3. For a native crash (the card says no JavaScript error was recorded), collect
+   the Android log. With a computer and a USB cable:
+   - Phone: Settings → About phone → tap "Software version" 7 times; then
+     Settings → System → Developer options → turn on **USB debugging**.
+   - Computer: install Android platform-tools, connect the phone, accept the
+     "Allow USB debugging" prompt, then run
+     `adb logcat -c`, reproduce the crash, and run
+     `adb logcat -d -b crash -b main > edgevitals-crash.txt`.
+   - Without a computer: Developer options → **Take bug report** →
+     Interactive report, reproduce the crash, then share the report from the
+     notification.
