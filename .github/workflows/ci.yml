@@ -22,7 +22,7 @@ jobs:
       DATABASE_URL: postgres://edgevitals:edgevitals@localhost:5432/edgevitals_test
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Runtime dependencies only; fails on high or critical advisories.
@@ -109,7 +109,7 @@ jobs:
       EXPO_NO_TELEMETRY: '1'
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
