@@ -56,8 +56,15 @@ export function describeScan(r: SessionResult): string[] {
 }
 
 /** Collapsible "Scan details" card, used to troubleshoot readings on real phones. */
-export function ScanDetails({ result }: { result: SessionResult }) {
-  const [open, setOpen] = useState(false);
+export function ScanDetails({
+  result,
+  initiallyOpen = false,
+}: {
+  result: SessionResult;
+  /** Open by default after a failed scan so the reason is visible without a tap. */
+  initiallyOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
   const lines = describeScan(result);
   return (
     <Card tone="surface" testID="scan-details" style={{ marginBottom: space[5] }}>

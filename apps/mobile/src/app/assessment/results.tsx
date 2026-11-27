@@ -18,6 +18,7 @@ import { VitalRows } from '../../components/vitals';
 import { timeOfDay } from '../../lib/format';
 import { uuid } from '../../lib/id';
 import { useFlow } from '../../state/flow';
+import { scanFor } from '../../state/lastScan';
 import { colors, space } from '../../theme/tokens';
 
 const RETRY_TIPS = [
@@ -73,6 +74,8 @@ export default function Results() {
     (m) => m.method === 'camera_experimental' && m.status === 'valid',
   );
   const failed = a.status === 'failed';
+  const scanResult =
+    scanFor(a.id) ?? (draft?.assessmentId === a.id ? (draft.result ?? null) : null);
   const isToday = dash.today[a.kind]?.assessment_id === a.id;
   const scores = isToday && !a.demo ? dash.scores : null;
   const rec = scores?.recovery;
@@ -228,9 +231,9 @@ export default function Results() {
         />
       ) : null}
       {/* On-device statistics for this scan (kept only in memory, never uploaded). */}
-      {!a.demo && draft?.assessmentId === a.id && draft.result ? (
+      {!a.demo && scanResult ? (
         <View style={{ marginTop: space[4] }}>
-          <ScanDetails result={draft.result} />
+          <ScanDetails result={scanResult} initiallyOpen={failed} />
         </View>
       ) : null}
       <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
