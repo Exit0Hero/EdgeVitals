@@ -7,6 +7,9 @@ import { LineChart } from '../../components/charts';
 import { Icon } from '../../components/Icon';
 import { Card, ErrorState, Loading, Segmented, StatusPill, T } from '../../components/ui';
 import { relativeLabel } from '../../lib/format';
+import { sourceLabel } from '../../lib/healthSync/mapping';
+import { autoSyncHealth } from '../../lib/healthSync/sync';
+import { useSession } from '../../state/session';
 import { colors, radius, space } from '../../theme/tokens';
 
 const METRICS = [
@@ -27,6 +30,8 @@ export default function Trends() {
   const [data, setData] = useState<TrendsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { me } = useSession();
+  const syncOn = !!me?.consents.health_sync?.active;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,7 +50,11 @@ export default function Trends() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      // Pull new readings from Health Connect / Apple Health, then refresh if any arrived.
+      autoSyncHealth(me?.id, syncOn).then((s) => {
+        if (s && (s.inserted || s.updated)) load();
+      });
+    }, [load, me?.id, syncOn]),
   );
 
   const m = METRICS.find((x) => x.id === metric)!;
@@ -54,8 +63,18 @@ export default function Trends() {
   const isScore = metric === 'recovery' || metric === 'stress' || metric === 'energy';
   const rhr = data?.summaries.resting_heart_rate;
   const rhrTag = rhr ? relativeLabel(rhr.relative) : null;
-  // Latest licensed-SDK blood pressure in the period (ADR 0007).
+  // Newest blood pressure in the period: cuff, health app or licensed SDK.
   const bp = data?.summaries.blood_pressure;
+  // Newest SpO2 from the user's own devices via their health app (ADR 0009).
+  const spo2 = data?.summaries.spo2 ?? null;
+  const bpSource =
+    bp?.source === 'cuff'
+      ? 'Typed in from your cuff'
+      : bp?.source_detail
+        ? sourceLabel(bp.source_detail)
+        : bp?.value != null
+          ? 'Licensed camera SDK estimate'
+          : null;
 
   return (
     <SafeAreaView
@@ -259,6 +278,11 @@ export default function Trends() {
               >
                 <View style={{ flex: 1 }}>
                   <T variant="body">Blood pressure</T>
+                  {bpSource && bp?.value != null ? (
+                    <T variant="tiny" color={colors.muted} testID="bp-source">
+                      {bpSource}
+                    </T>
+                  ) : null}
                   <Pressable
                     accessibilityRole="link"
                     onPress={() => router.push('/blood-pressure')}
@@ -277,9 +301,58 @@ export default function Trends() {
                     </T>
                     <View style={{ width: 90, alignItems: 'flex-end' }}>
                       <StatusPill
-                        label={bp.source === 'cuff' ? 'Your cuff' : 'Estimate'}
+                        label={
+                          bp.source === 'cuff'
+                            ? 'Your cuff'
+                            : bp.source_detail
+                              ? 'Your device'
+                              : 'Estimate'
+                        }
                         tone="muted"
                       />
+                    </View>
+                  </>
+                ) : (
+                  <T variant="small" color={colors.muted}>
+                    No readings yet
+                  </T>
+                )}
+              </View>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 14,
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.border,
+                }}
+                testID="spo2-summary"
+              >
+                <View style={{ flex: 1 }}>
+                  <T variant="body">SpO₂</T>
+                  {spo2 ? (
+                    <T variant="tiny" color={colors.muted} testID="spo2-source">
+                      {sourceLabel(spo2.source_detail)}
+                    </T>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => router.push(syncOn ? '/health-readings' : '/settings')}
+                    testID="spo2-sync-link"
+                    style={{ minHeight: 32, justifyContent: 'center' }}
+                  >
+                    <T variant="small" color={colors.primary}>
+                      {syncOn ? 'See synced readings' : 'Sync from your health app'}
+                    </T>
+                  </Pressable>
+                </View>
+                {spo2 ? (
+                  <>
+                    <T variant="label" style={{ textAlign: 'right' }}>
+                      {`${spo2.value}%`}
+                    </T>
+                    <View style={{ width: 90, alignItems: 'flex-end' }}>
+                      <StatusPill label="Your device" tone="muted" />
                     </View>
                   </>
                 ) : (

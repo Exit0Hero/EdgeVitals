@@ -94,6 +94,11 @@ async function collectExport(db: Queryable, userId: string) {
     cuff_blood_pressure: await one(
       'SELECT systolic, diastolic, pulse_bpm, measured_at, created_at FROM cuff_bp_readings WHERE user_id = $1 ORDER BY measured_at',
     ),
+    health_app_readings: await one(
+      `SELECT platform, metric, value::float8 AS value, value_secondary, measured_at, source_app, source_name,
+              device_manufacturer, device_model, created_at
+         FROM health_sync_readings WHERE user_id = $1 ORDER BY measured_at`,
+    ),
     audit_events: await one(
       'SELECT event_type, created_at FROM audit_events WHERE user_id = $1 ORDER BY created_at',
     ),
@@ -290,7 +295,7 @@ export async function meRoutes(app: FastifyInstance) {
         [uid],
       );
       await audit(c, uid, 'deletion.requested', { job_id: rows[0].id });
-      // Cascades to profile, consents, schedule, tokens, assessments, check-ins, measurements, cuff readings, exports.
+      // Cascades to profile, consents, schedule, tokens, assessments, check-ins, measurements, cuff and health-app readings, exports.
       const del = await c.query('DELETE FROM users WHERE id = $1', [uid]);
       if (del.rowCount !== 1) throw new ApiError(500, 'deletion_failed', 'Deletion failed');
       await c.query(
@@ -313,6 +318,7 @@ export async function meRoutes(app: FastifyInstance) {
         'check-ins',
         'measurements',
         'cuff blood-pressure readings',
+        'readings copied from Health Connect or Apple Health',
         'exports',
       ],
       retained:

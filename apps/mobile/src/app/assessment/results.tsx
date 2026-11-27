@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { api, ApiError, type Assessment, type Dashboard } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
 import { ScanDetails } from '../../components/ScanDetails';
+import { SyncedVitals } from '../../components/SyncedVitals';
 import {
   Banner,
   Card,
@@ -223,6 +224,7 @@ export default function Results() {
         </T>
       ) : null}
       <VitalRows vitals={vitals} />
+      {!a.demo ? <SyncedVitals /> : null}
       {!a.demo ? (
         <TextButton
           label="Log blood pressure from your cuff"

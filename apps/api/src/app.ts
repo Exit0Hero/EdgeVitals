@@ -11,6 +11,7 @@ import { assessmentRoutes } from './routes/assessments';
 import { authRoutes } from './routes/auth';
 import { insightRoutes } from './routes/insights';
 import { cuffReadingRoutes } from './routes/cuffReadings';
+import { healthSyncRoutes } from './routes/healthSync';
 import { meRoutes } from './routes/me';
 
 declare module 'fastify' {
@@ -136,5 +137,6 @@ export async function buildApp(
   await app.register(assessmentRoutes, { prefix: '/api/v1/assessments' });
   await app.register(insightRoutes, { prefix: '/api/v1' });
   await app.register(cuffReadingRoutes, { prefix: '/api/v1/blood-pressure' });
+  await app.register(healthSyncRoutes, { prefix: '/api/v1/health-sync' });
   return app;
 }

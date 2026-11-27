@@ -17,6 +17,10 @@ const SECTIONS: [string, string][] = [
     'To show your readings, learn your personal baseline over 14 days, and show trends and insights based only on your own records.',
   ],
   [
+    'Optional health app sync',
+    'Off unless you turn it on in Settings. When on, EdgeVitals reads only oxygen saturation (SpO₂) and blood pressure from Health Connect (Android) or Apple Health (iPhone), never writes to them, and stores a copy labelled with the app and device that recorded it. Turning it off stops reading and, on Android, removes our access; you can delete the copies at any time. These readings never feed your baseline or scores.',
+  ],
+  [
     'Optional anonymised data',
     'Off unless you turn it on. You can withdraw it at any time in Settings without affecting the app.',
   ],

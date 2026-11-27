@@ -67,12 +67,84 @@ export const cuffReadingSchema = z
       ctx.addIssue({ code: 'custom', message: 'Time is in the future', path: ['measured_at'] });
   });
 export type CuffReadingInput = z.infer<typeof cuffReadingSchema>;
+
+/**
+ * Readings copied, read-only, from the phone's health store (ADR 0009). They
+ * come from the user's own watch, ring, oximeter or cuff and are labelled with
+ * that source. They never feed baselines or scores.
+ */
+export const HEALTH_SYNC_PLATFORMS = ['health_connect', 'apple_health'] as const;
+export type HealthSyncPlatform = (typeof HEALTH_SYNC_PLATFORMS)[number];
+export const HEALTH_SYNC_METRICS = ['spo2', 'blood_pressure'] as const;
+export type HealthSyncMetric = (typeof HEALTH_SYNC_METRICS)[number];
+/** Most readings accepted in one upload. */
+export const HEALTH_SYNC_BATCH_MAX = 500;
+
+const optText = (max: number) => z.string().trim().min(1).max(max).nullable().optional();
+
+export const healthSyncReadingSchema = z
+  .object({
+    metric: z.enum(HEALTH_SYNC_METRICS),
+    /** SpO2 in percent, or systolic mmHg. */
+    value: z.number().finite(),
+    /** Diastolic mmHg for blood pressure; null for SpO2. */
+    value_secondary: z.number().finite().nullable().optional(),
+    measured_at: z.iso.datetime({ offset: true }),
+    /** The record's id in the health store, used to avoid duplicates. */
+    external_id: z.string().trim().min(1).max(200),
+    /** Package name (Android) or bundle id (iOS) of the app that wrote it. */
+    source_app: z.string().trim().min(1).max(200),
+    /** Friendly name of that app when the platform gives one. */
+    source_name: optText(120),
+    device_manufacturer: optText(120),
+    device_model: optText(120),
+  })
+  .superRefine((r, ctx) => {
+    if (r.metric === 'spo2') {
+      if (r.value < 50 || r.value > 100)
+        ctx.addIssue({ code: 'custom', message: 'SpO2 must be 50-100%', path: ['value'] });
+      if (r.value_secondary != null)
+        ctx.addIssue({
+          code: 'custom',
+          message: 'SpO2 has no second value',
+          path: ['value_secondary'],
+        });
+    } else {
+      if (!Number.isInteger(r.value) || r.value < 60 || r.value > 260)
+        ctx.addIssue({ code: 'custom', message: 'Systolic must be 60-260', path: ['value'] });
+      const d = r.value_secondary;
+      if (d == null || !Number.isInteger(d) || d < 30 || d > 160)
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Diastolic must be 30-160',
+          path: ['value_secondary'],
+        });
+      else if (d >= r.value)
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Diastolic must be lower than systolic',
+          path: ['value_secondary'],
+        });
+    }
+    if (Date.parse(r.measured_at) > Date.now() + 5 * 60_000)
+      ctx.addIssue({ code: 'custom', message: 'Time is in the future', path: ['measured_at'] });
+  });
+export type HealthSyncReadingInput = z.infer<typeof healthSyncReadingSchema>;
+
+export const healthSyncUploadSchema = z.object({
+  platform: z.enum(HEALTH_SYNC_PLATFORMS),
+  readings: z.array(healthSyncReadingSchema).max(HEALTH_SYNC_BATCH_MAX),
+});
+export type HealthSyncUpload = z.infer<typeof healthSyncUploadSchema>;
+
 export const profilePatchSchema = profileSchema.partial();
 
 export const CONSENT_TYPES = [
   'processing',
   'wellness_acknowledgement',
   'anonymous_improvement',
+  // Optional: read SpO2 and blood pressure from Health Connect / Apple Health (ADR 0009).
+  'health_sync',
 ] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
 export const REQUIRED_CONSENTS: readonly ConsentType[] = ['processing', 'wellness_acknowledgement'];

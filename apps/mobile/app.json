@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.edgevitals.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "EdgeVitals uses the front camera during a scan to estimate heart rate, HRV and breathing from subtle colour changes in your face. Video is processed on your device and never stored or uploaded."
+        "NSCameraUsageDescription": "EdgeVitals uses the front camera during a scan to estimate heart rate, HRV and breathing from subtle colour changes in your face. Video is processed on your device and never stored or uploaded.",
+        "NSHealthShareUsageDescription": "If you turn on health app sync, EdgeVitals reads oxygen saturation and blood pressure that your own devices saved to Apple Health, and shows them labelled with their source. It never writes to Apple Health."
       }
     },
     "android": {
@@ -22,7 +23,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.edgevitals.app",
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.READ_BLOOD_PRESSURE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -39,6 +44,23 @@
         {
           "icon": "./assets/android-icon-monochrome.png",
           "color": "#1E5EDA"
+        }
+      ],
+      "react-native-health-connect",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "If you turn on health app sync, EdgeVitals reads oxygen saturation and blood pressure that your own devices saved to Apple Health, and shows them labelled with their source. It never writes to Apple Health.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
         }
       ],
       "./plugins/withJavaCrashRecorder"
