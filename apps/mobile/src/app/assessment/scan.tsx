@@ -13,6 +13,7 @@ import { toSubmission } from '../../lib/measurements';
 import { demoMeasurements } from '../../lib/demo';
 import { withSdkVitals } from '../../vitals-sdk';
 import { rememberScan } from '../../state/lastScan';
+import { getExposureLock } from '../../camera/captureNotes';
 import { getExperimentalSpo2 } from '../../lib/experimental';
 import { useFlow } from '../../state/flow';
 import { colors, radius, space } from '../../theme/tokens';
@@ -101,7 +102,9 @@ export default function Scan() {
       finishing.current = true;
       setPhase('submitting');
       // Taken before finish(), which clears the per-frame buffer.
-      const trace = cancelled ? null : session.current.exportTrace();
+      const trace = cancelled
+        ? null
+        : `exposure_lock=${getExposureLock()}\n${session.current.exportTrace()}`;
       const pipelineResult = cancelled ? session.current.cancel() : session.current.finish();
       try {
         // SpO2 and BP only ever come from a licensed SDK; without one they stay unavailable.

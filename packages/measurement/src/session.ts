@@ -180,19 +180,20 @@ export class ScanSession {
    * test phone to debug a failed scan. Aggregates only (three numbers per
    * frame), never pixels. Must be called before finish()/cancel().
    *
-   * Format: header line, then one `dt,r,g,b,u` line per frame: dt = ms since
-   * the previous frame, r/g/b = mean skin colour x100 (integers), u = 1 if
-   * the frame was usable. Frames without a ROI have r/g/b of 0.
+   * Format: header line, then one `dt,r,g,b,u,skin` line per frame: dt = ms
+   * since the previous frame, r/g/b = mean skin colour x100 (integers), u = 1
+   * if the frame was usable, skin = skin pixels averaged. Frames without a
+   * ROI have zeros.
    */
   exportTrace(): string {
-    const lines = ['edgevitals-trace v1 dt_ms,r100,g100,b100,usable'];
+    const lines = ['edgevitals-trace v2 dt_ms,r100,g100,b100,usable,skin_px'];
     let prev: number | null = null;
     for (const f of this.frames) {
       const dt = prev === null ? 0 : Math.round(f.t - prev);
       prev = f.t;
       const c = f.roi;
       lines.push(
-        `${dt},${c ? Math.round(c.r * 100) : 0},${c ? Math.round(c.g * 100) : 0},${c ? Math.round(c.b * 100) : 0},${f.usable ? 1 : 0}`,
+        `${dt},${c ? Math.round(c.r * 100) : 0},${c ? Math.round(c.g * 100) : 0},${c ? Math.round(c.b * 100) : 0},${f.usable ? 1 : 0},${c ? c.skinPixels : 0}`,
       );
     }
     return lines.join('\n');
