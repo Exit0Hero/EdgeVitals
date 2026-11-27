@@ -303,7 +303,8 @@ export default function Settings() {
           }}
         />
         <T variant="small" color={colors.muted} style={{ marginTop: space[2] }}>
-          Blood pressure is not available from the camera.
+          Blood pressure is not available from the camera. You can log readings from your own cuff
+          in Trends.
         </T>
       </Section>
 

@@ -44,5 +44,14 @@ can apply. Published camera BP uses deep models trained on cuff-labelled dataset
 are imprecise: Curran et al. 2025 (arXiv:2503.00890, 143 visits) report systolic MAE ≈ 11.4 mmHg,
 r ≈ 0.54. Steinman et al. 2021 (_Front. Digit. Health_ 3:770096) note that pulse-timing methods
 need per-person cuff calibration and periodic recalibration. A hand-written formula would be a
-fabricated number, so blood pressure stays "Not available" unless a licensed SDK (ADR 0007)
-provides it. The product owner has been offered manual cuff logging as an alternative.
+fabricated number, so camera blood pressure stays "Not available" unless a licensed SDK
+(ADR 0007) provides it.
+
+### Blood pressure: log readings from your own cuff
+
+The product owner chose "both": cuff logging now, a licensed SDK later. Readings the user types in
+from their own cuff are stored in `cuff_bp_readings` (migration 004), separate from camera
+measurements, and labelled "From your cuff" / "Your cuff". Validation: integer mmHg, systolic
+60–260, diastolic 30–160, diastolic below systolic, not in the future. They appear in the Trends
+blood-pressure row (newest of cuff and licensed-SDK readings in the period), are included in the
+data export, and are deleted with the account. They do not feed baselines or scores.

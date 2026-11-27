@@ -220,6 +220,13 @@ export default function Results() {
         </T>
       ) : null}
       <VitalRows vitals={vitals} />
+      {!a.demo ? (
+        <TextButton
+          label="Log blood pressure from your cuff"
+          onPress={() => router.push('/blood-pressure')}
+          testID="results-log-bp"
+        />
+      ) : null}
       {/* On-device statistics for this scan (kept only in memory, never uploaded). */}
       {!a.demo && draft?.assessmentId === a.id && draft.result ? (
         <View style={{ marginTop: space[4] }}>

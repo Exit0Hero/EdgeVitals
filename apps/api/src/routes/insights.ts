@@ -149,6 +149,34 @@ export async function insightRoutes(app: FastifyInstance) {
     };
   });
 
+  /** Newest of: the user's own cuff readings and licensed-SDK readings, within the period. */
+  const latestBloodPressure = async (
+    userId: string,
+    records: AssessmentRecord[],
+    now: Date,
+    days: number,
+  ) => {
+    const sdk = latestSdkBloodPressure(records, now, days);
+    const { rows } = await app.db.query(
+      `SELECT systolic, diastolic, measured_at FROM cuff_bp_readings
+        WHERE user_id = $1 AND measured_at > $2::timestamptz - ($3::int * interval '1 day')
+        ORDER BY measured_at DESC LIMIT 1`,
+      [userId, now.toISOString(), days],
+    );
+    const cuff = rows[0];
+    if (!cuff) return sdk;
+    const cuffAt = new Date(cuff.measured_at).toISOString();
+    if (sdk.measured_at && sdk.measured_at > cuffAt) return sdk;
+    return {
+      value: cuff.systolic as number,
+      value_secondary: cuff.diastolic as number,
+      measured_at: cuffAt,
+      source: 'cuff',
+      relative: 'unavailable' as const,
+      reason: null,
+    };
+  };
+
   app.get('/trends', async (req) => {
     const q = parse(trendsQuerySchema, req.query);
     const { records, tz, now } = await context(req.userId!);
@@ -174,7 +202,7 @@ export async function insightRoutes(app: FastifyInstance) {
           ),
           sample_count: hr.length,
         },
-        blood_pressure: latestSdkBloodPressure(records, now, PERIOD_DAYS[q.period]),
+        blood_pressure: await latestBloodPressure(req.userId!, records, now, PERIOD_DAYS[q.period]),
       },
     };
   });

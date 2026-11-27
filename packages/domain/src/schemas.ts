@@ -47,6 +47,26 @@ export const profileSchema = z.object({
   weight_kg: z.number().min(30).max(300),
 });
 export type Profile = z.infer<typeof profileSchema>;
+
+/** A blood-pressure reading the user copied from their own cuff. */
+export const cuffReadingSchema = z
+  .object({
+    systolic: z.number().int().min(60).max(260),
+    diastolic: z.number().int().min(30).max(160),
+    pulse_bpm: z.number().int().min(30).max(220).nullable().optional(),
+    measured_at: z.iso.datetime({ offset: true }),
+  })
+  .superRefine((r, ctx) => {
+    if (r.diastolic >= r.systolic)
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Diastolic must be lower than systolic',
+        path: ['diastolic'],
+      });
+    if (Date.parse(r.measured_at) > Date.now() + 5 * 60_000)
+      ctx.addIssue({ code: 'custom', message: 'Time is in the future', path: ['measured_at'] });
+  });
+export type CuffReadingInput = z.infer<typeof cuffReadingSchema>;
 export const profilePatchSchema = profileSchema.partial();
 
 export const CONSENT_TYPES = [

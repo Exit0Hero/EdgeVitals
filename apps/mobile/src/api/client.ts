@@ -255,6 +255,15 @@ export type Trends = TrendSeries & {
   };
 };
 
+export interface CuffReading {
+  id: string;
+  systolic: number;
+  diastolic: number;
+  pulse_bpm: number | null;
+  measured_at: string;
+  created_at: string;
+}
+
 // ───────── endpoints ─────────
 type Tokens = { access_token: string; refresh_token: string };
 export const api = {
@@ -301,6 +310,15 @@ export const api = {
   submitMeasurements: (id: string, body: unknown) =>
     client.request<Assessment>('POST', `/api/v1/assessments/${id}/measurements`, body),
   dashboard: () => client.request<Dashboard>('GET', '/api/v1/dashboard/today'),
+  cuffReadings: (days = 90) =>
+    client.request<{ items: CuffReading[] }>('GET', `/api/v1/blood-pressure?days=${days}`),
+  addCuffReading: (r: {
+    systolic: number;
+    diastolic: number;
+    pulse_bpm: number | null;
+    measured_at: string;
+  }) => client.request<CuffReading>('POST', '/api/v1/blood-pressure', r),
+  deleteCuffReading: (id: string) => client.request<void>('DELETE', `/api/v1/blood-pressure/${id}`),
   trends: (metric: string, period: string) =>
     client.request<Trends>('GET', `/api/v1/trends?metric=${metric}&period=${period}`),
   requestExport: (key: string) =>
