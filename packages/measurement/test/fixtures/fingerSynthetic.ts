@@ -32,6 +32,8 @@ export interface FingerSyntheticOptions {
 
 export interface FingerTruth {
   frames: FingerFrameSample[];
+  /** True beat (systolic upstroke) times, s, of every simulated beat. */
+  beatTimes: number[];
   ibis: number[];
   rmssdMs: number;
   sdnnMs: number;
@@ -110,6 +112,7 @@ export function fingerSession(o: FingerSyntheticOptions = {}): FingerTruth {
   frames.sort((a, b) => a.t - b.t);
   return {
     frames,
+    beatTimes: beats,
     ibis,
     rmssdMs: Math.sqrt(ss / (ibis.length - 1)) * 1000,
     sdnnMs: sd * 1000,

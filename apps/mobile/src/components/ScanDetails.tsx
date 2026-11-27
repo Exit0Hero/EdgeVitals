@@ -55,7 +55,7 @@ export function describeScan(r: SessionResult): string[] {
       `Beats: ${d.ibiCount} intervals, ${d.ibiAcceptedFraction === null ? '—' : `${Math.round(d.ibiAcceptedFraction * 100)}%`} accepted (HR needs ≥ 80%, HRV ≥ 85%) · beat HR ${f.beatMeanHrBpm ?? '—'} bpm · halves differ ${f.halvesDiffBpm ?? '—'} bpm (needs ≤ 5)`,
     );
     lines.push(
-      `Beat timing error: ~${f.timingNoiseMs ?? '—'} ms (HRV needs ≤ 4) · pulse strength ${f.pulseStrengthPct ?? '—'}% · SDNN ${f.sdnnMs ?? '—'} ms`,
+      `Beat timing error: ~${f.timingNoiseMs ?? '—'} ms (HRV needs ≤ ${f.timingLimitMs ?? '—'}) · pulse strength ${f.pulseStrengthPct ?? '—'}% · SDNN ${f.sdnnMs ?? '—'} ms`,
     );
     lines.push(
       `Breathing signals: ${

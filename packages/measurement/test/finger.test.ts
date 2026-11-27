@@ -63,8 +63,33 @@ describe('finger scan: accuracy on synthetic traces', () => {
     const r = analyzeFingerSession(fingerSession({ redClipped: true, noise: 0.3, seed: 1 }).frames);
     expect(metric(r, 'heart_rate').status).toBe('valid');
     expect(metric(r, 'hrv').status).toBe('unavailable');
-    expect(r.diagnostics.finger!.timingNoiseMs!).toBeGreaterThan(FINGER_CONFIG.maxTimingNoiseMs);
+    const f = r.diagnostics.finger!;
+    expect(f.timingNoiseMs!).toBeGreaterThan(f.timingLimitMs!);
   });
+
+  it('never reports a low HRV inflated by timing noise', () => {
+    // Small true beat-to-beat variation (~11-15 ms): timing error would
+    // dominate, so HRV must be withheld or close to the truth.
+    for (const [pulseDepth, noise, redClipped] of [
+      [0.02, 0.3, false],
+      [0.006, 0.3, false],
+      [0.01, 0.3, true],
+    ] as const)
+      for (let seed = 1; seed <= 6; seed++) {
+        const s = fingerSession({
+          pulseDepth,
+          noise,
+          redClipped,
+          rsaSec: 0.02,
+          jitterSec: 0.006,
+          heartRateBpm: 65,
+          seed,
+        });
+        const h = metric(analyzeFingerSession(s.frames), 'hrv');
+        if (h.status === 'valid')
+          expect(Math.abs(h.value! - s.rmssdMs) / s.rmssdMs).toBeLessThan(0.25);
+      }
+  }, 60_000);
 
   it('never reports SpO2 or blood pressure', () => {
     const r = analyzeFingerSession(fingerSession({ seed: 9 }).frames);

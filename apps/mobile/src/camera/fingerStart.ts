@@ -54,7 +54,7 @@ export interface TorchOutcome {
 export async function enableTorchWithRetry(
   controller: TorchController | null | undefined,
   log: StartLog,
-  delaysMs: number[] = [0, 250, 600, 1200, 2000],
+  delaysMs: number[] = [0, 250, 600, 1200, 2000, 3000],
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   isCancelled: () => boolean = () => false,
 ): Promise<TorchOutcome> {
