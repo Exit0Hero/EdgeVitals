@@ -53,6 +53,9 @@ const DETECTOR_OPTIONS: FaceDetectorOptions = {
 // coordinates in the mirrored upright image; on Android it ignores mirroring.
 const MLKIT_MIRRORS = Platform.OS === 'ios';
 
+// Frame.timestamp units to milliseconds: CameraX nanoseconds, AVFoundation seconds.
+const TIMESTAMP_SCALE = Platform.OS === 'android' ? 1e-6 : 1e3;
+
 interface NativeFrameResult {
   ts: number;
   faces: FaceBox[];
@@ -206,7 +209,7 @@ function ProcessingCamera({ device, active, mode, size, cb }: InnerProps) {
     () => (mode === 'frames' ? null : createFaceDetector(DETECTOR_OPTIONS)),
     [mode],
   );
-  const normalize = useRef(createTimestampNormalizer());
+  const normalize = useRef(createTimestampNormalizer(TIMESTAMP_SCALE));
   const reportedUnsupported = useRef(false);
 
   const deliver = useCallback(

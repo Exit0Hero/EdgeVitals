@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { api, ApiError, type Assessment, type Dashboard } from '../../api/client';
 import { AssessmentHeader } from '../../components/AssessmentHeader';
+import { ScanDetails } from '../../components/ScanDetails';
 import {
   Banner,
   Card,
@@ -216,6 +217,12 @@ export default function Results() {
         </T>
       ) : null}
       <VitalRows vitals={vitals} />
+      {/* On-device statistics for this scan (kept only in memory, never uploaded). */}
+      {!a.demo && draft?.assessmentId === a.id && draft.result ? (
+        <View style={{ marginTop: space[4] }}>
+          <ScanDetails result={draft.result} />
+        </View>
+      ) : null}
       <T variant="small" color={colors.muted} style={{ marginTop: space[4] }}>
         Wellness information only, not for diagnosis. Heart rate, HRV and breathing are camera
         estimates that have not been clinically validated.{' '}
