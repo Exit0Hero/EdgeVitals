@@ -46,8 +46,8 @@ import type {
 } from './types';
 import { METRIC_UNITS } from './types';
 
-export const FINGER_PIPELINE_VERSION = '0.1.0';
-export const FINGER_CONFIG_VERSION = 'finger-v0.1-synthetic-defaults';
+export const FINGER_PIPELINE_VERSION = '0.2.0';
+export const FINGER_CONFIG_VERSION = 'finger-v0.2-low-confidence-breathing';
 export const FINGER_ALGORITHM = 'finger-ppg-slope';
 
 export const FINGER_CONFIG = {
@@ -109,6 +109,16 @@ export const FINGER_CONFIG = {
   minBreathingConcentration: 0.5,
   breathingPeakHalfWidthHz: 0.04,
   breathingAgreementPerMin: 2,
+  /**
+   * Low-confidence breathing (v0.2): two modulations within this many
+   * breaths/min of each other, both at least lowConfidenceBreathingConcentration.
+   * On 1,500 simulated no-breathing traces the best such pair reached 0.41
+   * (tolerance 1/min); on 300 traces with breathing, pairs at >= 0.45 were
+   * within 0.8/min of the truth. Shown labelled "Low confidence" and never
+   * used for baselines.
+   */
+  lowConfidenceBreathingAgreementPerMin: 1,
+  lowConfidenceBreathingConcentration: 0.45,
   frame: {
     /** Share of sampled pixels that must look like a lit fingertip (red-dominant). */
     minCoverage: 0.85,
@@ -527,6 +537,26 @@ export function respiratoryPeak(
 }
 
 /**
+ * Lower-confidence breathing: the clearest pair of modulations that agree
+ * within lowConfidenceBreathingAgreementPerMin, both at least
+ * lowConfidenceBreathingConcentration. Returns their mean, or null.
+ */
+export function lowConfidenceBreathing(mods: BreathingModulation[]): number | null {
+  let best: { c: number; rate: number } | null = null;
+  for (let i = 0; i < mods.length; i++)
+    for (let j = i + 1; j < mods.length; j++) {
+      const a = mods[i]!;
+      const b = mods[j]!;
+      if (a.perMin === null || b.perMin === null) continue;
+      if (Math.abs(a.perMin - b.perMin) > fc.lowConfidenceBreathingAgreementPerMin) continue;
+      const c = Math.min(a.concentration, b.concentration);
+      if (c >= fc.lowConfidenceBreathingConcentration && (!best || c > best.c))
+        best = { c, rate: (a.perMin + b.perMin) / 2 };
+    }
+  return best ? best.rate : null;
+}
+
+/**
  * Breathing from three respiratory modulations of a finger pulse. Returns
  * the mean of the largest group (≥ 2) of clear modulations that agree within
  * `breathingAgreementPerMin`, or null.
@@ -820,7 +850,14 @@ export function analyzeFingerSession(
     };
     finger.breathing = [mod('riiv', riivSeries), mod('riav', riav), mod('rifv', rifv)];
     const br = fuseBreathing(finger.breathing);
-    if (br === null) {
+    const lowBr = br === null ? lowConfidenceBreathing(finger.breathing) : null;
+    if (br === null && lowBr !== null) {
+      const res = valid('breathing_rate', Math.round(lowBr), quality * 0.5);
+      results.set('breathing_rate', {
+        ...res,
+        qualityFlags: [...res.qualityFlags, 'low_confidence'],
+      });
+    } else if (br === null) {
       const clear = finger.breathing.filter(
         (m) => m.perMin !== null && m.concentration >= fc.minBreathingConcentration,
       ).length;

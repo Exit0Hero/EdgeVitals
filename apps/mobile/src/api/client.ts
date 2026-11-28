@@ -183,6 +183,8 @@ export interface MeasurementOut {
   value_secondary: number | null;
   unit: string;
   quality_score: number | null;
+  /** Includes 'low_confidence' for a lower-confidence estimate. */
+  quality_flags?: string[];
   reason: string | null;
   method: string;
   algorithm_name: string;
@@ -221,6 +223,8 @@ export interface VitalsSummary {
     method?: string | null;
     /** Why the value is missing; null when valid. */
     reason?: string | null;
+    /** A lower-confidence estimate, kept out of baselines and scores. */
+    low_confidence?: boolean;
     relative: RelativeStatus;
   }[];
 }

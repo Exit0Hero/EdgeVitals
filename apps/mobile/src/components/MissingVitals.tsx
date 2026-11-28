@@ -1,5 +1,10 @@
 import { View } from 'react-native';
-import { METRIC_LONG, missingExplanation, type MissingVital } from '../lib/format';
+import {
+  LOW_CONFIDENCE_COPY,
+  METRIC_LONG,
+  missingExplanation,
+  type MissingVital,
+} from '../lib/format';
 import { colors, space } from '../theme/tokens';
 import { sortVitals } from './vitals';
 import { Card, T } from './ui';
@@ -25,10 +30,16 @@ export function MissingVitals({
   fingerScan: boolean;
 }) {
   const heartRateValid = vitals.some((v) => v.metric === 'heart_rate' && v.status === 'valid');
+  const heartRateLowConfidence = vitals.some(
+    (v) =>
+      v.metric === 'heart_rate' &&
+      v.status === 'valid' &&
+      !!v.quality_flags?.includes('low_confidence'),
+  );
   const missing = sortVitals(vitals).filter((v) => v.status !== 'valid');
   const items: { key: string; label: string; body: string }[] = [];
   for (const v of missing) {
-    const body = missingExplanation(v, { heartRateValid, fingerScan });
+    const body = missingExplanation(v, { heartRateValid, fingerScan, heartRateLowConfidence });
     if (!body) continue;
     const label =
       v.metric === 'heart_rate'
@@ -45,11 +56,24 @@ export function MissingVitals({
         : (METRIC_LONG[v.metric] ?? v.metric);
     items.push({ key: v.metric, label, body });
   }
+  for (const v of sortVitals(vitals))
+    if (
+      v.status === 'valid' &&
+      v.quality_flags?.includes('low_confidence') &&
+      LOW_CONFIDENCE_COPY[v.metric]
+    )
+      items.unshift({
+        key: `low-${v.metric}`,
+        label: `${METRIC_LONG[v.metric] ?? v.metric}: low confidence`,
+        body: LOW_CONFIDENCE_COPY[v.metric]!,
+      });
   if (!items.length) return null;
   return (
     <Card tone="surface" testID="missing-vitals" style={{ marginBottom: space[5] }}>
       <T variant="label" style={{ marginBottom: space[2] }}>
-        Why some vitals have no value
+        {items.some((i) => i.key.startsWith('low-'))
+          ? 'About these readings'
+          : 'Why some vitals have no value'}
       </T>
       {items.map((it) => (
         <View key={it.key} style={{ marginBottom: space[2] }} testID={`missing-${it.key}`}>

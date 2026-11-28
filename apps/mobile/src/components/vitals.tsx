@@ -2,7 +2,16 @@ import type { RelativeStatus } from '@edgevitals/domain';
 import { View } from 'react-native';
 import { METRIC_SHORT, METRIC_UNIT, REASON_COPY, relativeLabel } from '../lib/format';
 import { colors, radius, space } from '../theme/tokens';
+import { Icon } from './Icon';
 import { StatusPill, T } from './ui';
+
+const METRIC_ICON = {
+  heart_rate: 'heart',
+  hrv: 'pulse',
+  breathing_rate: 'wind',
+  spo2: 'drop',
+  blood_pressure: 'chart',
+} as const;
 
 export interface VitalValue {
   metric: string;
@@ -14,7 +23,14 @@ export interface VitalValue {
   method?: string | null;
   relative?: RelativeStatus;
   reason?: string | null;
+  /** Measurement quality flags; 'low_confidence' marks a lower-confidence estimate. */
+  quality_flags?: string[] | null;
+  /** Dashboard form of the same marker. */
+  low_confidence?: boolean;
 }
+
+export const isLowConfidence = (v: VitalValue) =>
+  v.status === 'valid' && (!!v.low_confidence || !!v.quality_flags?.includes('low_confidence'));
 
 const ORDER = ['heart_rate', 'hrv', 'breathing_rate', 'spo2', 'blood_pressure'];
 export const sortVitals = <V extends { metric: string }>(v: V[]) =>
@@ -35,13 +51,15 @@ function display(v: VitalValue): { main: string; unit: string | null; note: stri
       note:
         v.status === 'simulated'
           ? 'Demo data'
-          : v.method === 'licensed_sdk'
-            ? 'Wellness estimate'
-            : v.method === 'camera_experimental'
-              ? 'Experimental'
-              : v.method === 'finger_ppg'
-                ? 'Finger scan'
-                : null,
+          : isLowConfidence(v)
+            ? 'Low confidence'
+            : v.method === 'licensed_sdk'
+              ? 'Wellness estimate'
+              : v.method === 'camera_experimental'
+                ? 'Experimental'
+                : v.method === 'finger_ppg'
+                  ? 'Finger scan'
+                  : null,
     };
   }
   const unsupported =
@@ -114,7 +132,9 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
             key={v.metric}
             accessible
             accessibilityLabel={`${METRIC_SHORT[v.metric] === 'Breathing' ? 'Breathing rate' : METRIC_SHORT[v.metric]}: ${
-              d.main === '—' ? d.note : `${d.main} ${d.unit ?? ''}${rel ? `, ${rel.label}` : ''}`
+              d.main === '—'
+                ? d.note
+                : `${d.main} ${d.unit ?? ''}${d.note === 'Low confidence' ? ', low confidence' : rel ? `, ${rel.label}` : ''}`
             }`}
             style={{
               flexDirection: 'row',
@@ -125,6 +145,23 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
             }}
             testID={`row-${v.metric}`}
           >
+            <View
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: d.main === '—' ? colors.surface : colors.primarySoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: space[3],
+              }}
+            >
+              <Icon
+                name={METRIC_ICON[v.metric as keyof typeof METRIC_ICON] ?? 'pulse'}
+                size={16}
+                color={d.main === '—' ? colors.subtle : colors.primary}
+              />
+            </View>
             <T variant="body" style={{ flex: 1 }}>
               {v.metric === 'breathing_rate' ? 'Breathing rate' : METRIC_SHORT[v.metric]}
             </T>
@@ -145,6 +182,8 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
             <View style={{ minWidth: 92, marginLeft: space[2], alignItems: 'flex-end' }}>
               {d.note === 'Demo data' ? (
                 <StatusPill label="Demo" tone="muted" />
+              ) : d.note === 'Low confidence' ? (
+                <StatusPill label="Low confidence" tone="warning" testID={`low-${v.metric}`} />
               ) : d.note === 'Wellness estimate' ? (
                 <StatusPill label="Estimate" tone="muted" />
               ) : d.note === 'Experimental' ? (

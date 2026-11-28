@@ -36,6 +36,8 @@ function vitals(r: AssessmentRecord | undefined, baseline: BaselineProgress) {
       value_secondary: m.status === 'valid' ? (m.valueSecondary ?? null) : null,
       method: m.method ?? null,
       reason: m.status === 'valid' ? null : (m.reason ?? null),
+      /** Shown labelled "Low confidence"; never used for baselines or scores. */
+      low_confidence: m.status === 'valid' && !!m.lowConfidence,
       relative: relativeToBaseline(
         m.status === 'valid' ? m.value : null,
         baseline.metrics.find((b) => b.metric === m.metric),

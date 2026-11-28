@@ -7,8 +7,8 @@
  * validation work required before any accuracy claim. Bump CONFIG_VERSION
  * whenever a value changes so every stored measurement is traceable.
  */
-export const PIPELINE_VERSION = '0.2.1';
-export const CONFIG_VERSION = 'v0.4.1-fusion-prv';
+export const PIPELINE_VERSION = '0.3.0';
+export const CONFIG_VERSION = 'v0.5-low-confidence';
 export const ALGORITHM_NAME = 'pos-welch';
 
 export const PIPELINE_CONFIG = {

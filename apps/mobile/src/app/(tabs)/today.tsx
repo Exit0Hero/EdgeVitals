@@ -10,7 +10,7 @@ import { VitalChips, VitalTiles } from '../../components/vitals';
 import { greeting, longDate, relativeWhen } from '../../lib/format';
 import { useSession } from '../../state/session';
 import { useReminderSync } from '../../state/useReminderSync';
-import { colors, radius, space } from '../../theme/tokens';
+import { colors, radius, shadow, space } from '../../theme/tokens';
 
 export function useDashboard() {
   const [data, setData] = useState<Dashboard | null>(null);
@@ -216,6 +216,7 @@ function AssessmentAction({
           flexDirection: 'row',
           alignItems: 'center',
           gap: space[3],
+          ...shadow.button,
         })}
       >
         <Icon name="pulse" color={colors.white} />
@@ -299,6 +300,26 @@ function ScoreCard({
       <T variant="small" color={colors.primary} style={{ fontWeight: '700' }}>
         {score ? score.label : 'Not yet'}
       </T>
+      <View
+        style={{
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.surface,
+          marginVertical: 6,
+          overflow: 'hidden',
+        }}
+      >
+        {score ? (
+          <View
+            style={{
+              width: `${Math.max(4, Math.min(100, score.value))}%`,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: colors.primary,
+            }}
+          />
+        ) : null}
+      </View>
       <T variant="tiny" color={colors.muted} style={{ marginTop: 2 }}>
         {delta !== null && delta !== 0
           ? `${delta > 0 ? '↑' : '↓'} ${Math.abs(delta)} vs usual`

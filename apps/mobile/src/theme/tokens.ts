@@ -49,4 +49,22 @@ export const type = {
   metricLarge: { fontSize: 34, lineHeight: 38, fontWeight: '800' as const },
 } as const;
 
+/** Soft elevation for cards and the primary button (iOS shadow*, Android elevation, web boxShadow). */
+export const shadow = {
+  card: {
+    shadowColor: '#0B1B3F',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  button: {
+    shadowColor: '#1E5EDA',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+} as const;
+
 export const MIN_TOUCH = 44;

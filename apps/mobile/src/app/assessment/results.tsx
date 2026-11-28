@@ -7,6 +7,8 @@ import { FingerPulseCard } from '../../components/FingerPulseCard';
 import { Icon } from '../../components/Icon';
 import { MissingVitals } from '../../components/MissingVitals';
 import { ScanDetails } from '../../components/ScanDetails';
+import { ScanFeedback } from '../../components/ScanFeedback';
+import { scanFindings } from '../../lib/scanAdvice';
 import { SyncedVitals } from '../../components/SyncedVitals';
 import {
   Banner,
@@ -88,6 +90,14 @@ export default function Results() {
     scanFor(a.id) ?? (draft?.assessmentId === a.id ? (draft.result ?? null) : null);
   const fingerScan =
     scanResult?.scanType === 'finger' || a.measurements.some((m) => m.method === 'finger_ppg');
+  const findings = scanResult ? scanFindings(scanResult) : [];
+  const pulseMetrics = a.measurements.filter((m) =>
+    ['heart_rate', 'hrv', 'breathing_rate'].includes(m.metric),
+  );
+  const showFeedback =
+    !a.demo &&
+    findings.length > 0 &&
+    pulseMetrics.some((m) => m.status !== 'valid' || m.quality_flags?.includes('low_confidence'));
   const isToday = dash.today[a.kind]?.assessment_id === a.id;
   const scores = isToday && !a.demo ? dash.scores : null;
   const rec = scores?.recovery;
@@ -197,7 +207,8 @@ export default function Results() {
         />
       ) : null}
 
-      {failed ? (
+      {failed && showFeedback && scanResult ? <ScanFeedback result={scanResult} /> : null}
+      {failed && !showFeedback ? (
         <Card tone="surface" testID="failure-tips" style={{ marginBottom: space[5] }}>
           <View style={{ flexDirection: 'row', gap: space[3], marginBottom: space[3] }}>
             <Icon name="info" size={20} />
@@ -297,6 +308,7 @@ export default function Results() {
       <Card style={{ paddingVertical: space[1], marginBottom: space[5] }} testID="results-vitals">
         <VitalRows vitals={vitals} />
       </Card>
+      {!failed && showFeedback && scanResult ? <ScanFeedback result={scanResult} /> : null}
       {!a.demo ? <MissingVitals vitals={a.measurements} fingerScan={fingerScan} /> : null}
       {!a.demo && fingerScan && scanResult ? <FingerPulseCard result={scanResult} /> : null}
       {!a.demo ? <SyncedVitals /> : null}
