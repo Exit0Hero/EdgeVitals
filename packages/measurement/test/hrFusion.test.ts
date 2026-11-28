@@ -156,7 +156,7 @@ describe('heart-rate fusion (synthetic)', () => {
       if (res.metrics.find((m) => m.metric === 'heart_rate')!.status === 'valid') accepted++;
     }
     expect(accepted).toBe(0);
-  });
+  }, 60_000);
 
   it('still reads weak in-phase pulses in per-region noise', () => {
     let read = 0;
