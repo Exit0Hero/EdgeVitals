@@ -397,7 +397,52 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
       segFps >= 25,
       regionCount < 2 || regionSupport >= 2,
     ];
-    if (!hrValid) {
+    const lowConfidence = !hrValid
+      ? lowConfidenceHeartRate(
+          hr,
+          diagnostics.legacy,
+          diagnostics.hrGate,
+          acqFailure,
+          artefactShare,
+        )
+      : null;
+    if (lowConfidence !== null) {
+      // Strict fusion abstained, but the single-method v0.3 window consensus
+      // (calibrated on its own: 0 of 4,000 simulated pulseless captures)
+      // passed and points at the same rate. Shown as a low-confidence
+      // estimate only; PRV and colour-derived breathing stay withheld
+      // because they need a stronger pulse than this.
+      results.set(
+        'heart_rate',
+        lowConfidenceResult(
+          withQuality(
+            {
+              ...valid('heart_rate', round(lowConfidence, 0), 0.3, [
+                'window_consensus',
+                'single_method_consensus',
+              ]),
+              provenance: { ...PROVENANCE, algorithm: 'pbv-window-consensus-v0.3' },
+            },
+            dur,
+            hr.failure,
+            hrComponents,
+            [false],
+          ),
+        ),
+      );
+      for (const m of ['hrv', 'breathing_rate'] as const)
+        results.set(
+          m,
+          withQuality(
+            unavailable(m, 'low_signal_quality', ['heart_rate_low_confidence']),
+            dur,
+            'heart_rate_low_confidence',
+            {},
+          ),
+        );
+      if (opts.experimentalSpo2)
+        spo2Result = experimentalUnavailable('low_signal_quality', ['heart_rate_gate']);
+    } else if (!hrValid) {
       const reason: UnavailableReason = acqFailure
         ? 'low_signal_quality'
         : (hr.reason ?? 'low_signal_quality');
@@ -936,6 +981,60 @@ function regionSnr(seg: FrameSample[], fs: number): (number | null)[] | undefine
     );
     return hr ? round(hr.snrDb, 2) : null;
   });
+}
+
+/**
+ * Fusion failures that mean "not enough evidence", as opposed to evidence of
+ * a conflict (methods, regions, autocorrelation or the two paths pointing at
+ * different rates). Only these may fall back to the low-confidence rule.
+ */
+const LOW_CONFIDENCE_FALLBACK_FAILURES = new Set([
+  'weak_signal',
+  'windows_disagree',
+  'no_carrying_method',
+  'too_short',
+]);
+
+/**
+ * Low-confidence face heart rate (config v0.5): the v0.3 single-method rule
+ * (PBV on the pooled skin ROI, 10 s windows, agreement >= 0.55 + 5/windows of
+ * at least 16 windows, SNR >= -2 dB), plus the whole-scan POS peak at the
+ * same rate (within 6 bpm). With one fixed candidate there is no
+ * selection across methods or regions, which is what made the bar unsafe once
+ * candidates were fused; on its own it accepted 0 of 4,000 simulated
+ * pulseless captures (and 0 of the pulseless checks in
+ * test/lowConfidence.test.ts). It must also agree with the fused windows'
+ * rate when they have one.
+ */
+function lowConfidenceHeartRate(
+  hr: { failure: string | null; windows: { bpm: number | null } },
+  legacy: SignalDiagnostics['legacy'],
+  hrGate: SignalDiagnostics['hrGate'],
+  acqFailure: string | null,
+  artefactShare: number,
+): number | null {
+  if (acqFailure || !legacy || legacy.acceptedBy !== 'consensus' || legacy.hrBpm === null)
+    return null;
+  if (!hr.failure || !LOW_CONFIDENCE_FALLBACK_FAILURES.has(hr.failure)) return null;
+  if (artefactShare > HR_FUSION.maxArtefactShare) return null;
+  if (hr.windows.bpm !== null && Math.abs(hr.windows.bpm - legacy.hrBpm) > HR_FUSION.toleranceBpm)
+    return null;
+  if (legacy.hrBpm < HR_FUSION.rangeBpm[0] || legacy.hrBpm > HR_FUSION.rangeBpm[1]) return null;
+  // The whole-scan POS spectrum must peak at the same rate as the windows.
+  // In simulated pulseless captures that cleared the window bar, the two
+  // pointed at different rates.
+  if (!hrGate || Math.abs(hrGate.bpm - legacy.hrBpm) > HR_FUSION.toleranceBpm) return null;
+  return legacy.hrBpm;
+}
+
+/** Mark a passing result as a low-confidence estimate (grade 'low', flag 'low_confidence'). */
+export function lowConfidenceResult(res: MetricResult): MetricResult {
+  const flags = res.qualityFlags.filter((f) => !f.startsWith('grade_'));
+  return {
+    ...res,
+    qualityFlags: [...flags, 'low_confidence', 'grade_low'],
+    ...(res.quality ? { quality: { ...res.quality, grade: 'low' as const } } : {}),
+  };
 }
 
 function hrQualityFor(snrDb: number): number {

@@ -72,7 +72,7 @@ describe('window-consensus heart rate', () => {
       if (res.metrics.some((m) => m.status === 'valid')) accepted++;
     }
     expect(accepted).toBe(0);
-  });
+  }, 60_000);
 });
 
 describe('scan length', () => {

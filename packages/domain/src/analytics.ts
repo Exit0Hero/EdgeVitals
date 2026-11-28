@@ -46,6 +46,11 @@ export interface MeasurementRecord {
   algorithm?: string;
   /** Why a value is missing (UnavailableReason), null when valid. */
   reason?: string | null;
+  /**
+   * A low-confidence estimate (quality flag 'low_confidence'): shown on its
+   * scan, but never used for baselines, trends or scores.
+   */
+  lowConfidence?: boolean;
 }
 
 export interface AssessmentRecord {
@@ -115,7 +120,7 @@ export function validSamples(
   for (const r of realCompleted(records)) {
     if (kind && r.kind !== kind) continue;
     for (const m of r.measurements) {
-      if (m.metric === metric && m.status === 'valid' && m.value !== null) {
+      if (m.metric === metric && m.status === 'valid' && m.value !== null && !m.lowConfidence) {
         out.push({ at: r.startedAt, tz: r.timezone, value: m.value });
       }
     }
@@ -258,7 +263,9 @@ export function energyLabel(v: number): string {
 }
 
 function metricValue(r: AssessmentRecord | undefined, metric: Metric): number | null {
-  const m = r?.measurements.find((x) => x.metric === metric && x.status === 'valid');
+  const m = r?.measurements.find(
+    (x) => x.metric === metric && x.status === 'valid' && !x.lowConfidence,
+  );
   return m?.value ?? null;
 }
 

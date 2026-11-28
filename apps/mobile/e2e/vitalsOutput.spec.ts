@@ -1,4 +1,4 @@
-import { expect, request, test } from '@playwright/test';
+import { expect, request, test, type Page } from '@playwright/test';
 
 /**
  * Every vital on the results and Today screens shows either a value or a
@@ -28,9 +28,9 @@ const m = (metric: string, value: number | null, unit: string, reason: string | 
   measured_at: new Date().toISOString(),
 });
 
-test('a partial finger scan explains each vital that has no value', async ({ page }) => {
+async function seedUser() {
   const api = await request.newContext({ baseURL: API });
-  const email = `e2e-vitals-${Date.now()}@example.test`;
+  const email = `e2e-vitals-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const password = 'fixture vitals 2026';
   const reg = await api.post('/api/v1/auth/register', { data: { email, password } });
   expect(reg.ok()).toBeTruthy();
@@ -64,6 +64,19 @@ test('a partial finger scan explains each vital that has no value', async ({ pag
     headers,
     data: { kind: 'morning', sleep_quality: 4, energy_rating: 3, alcohol_previous_evening: false },
   });
+  return { api, email, password, headers, id };
+}
+
+async function signIn(page: Page, email: string, password: string) {
+  await page.goto('/sign-in');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill(password);
+  await page.getByTestId('sign-in-submit').click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+}
+
+test('a partial finger scan explains each vital that has no value', async ({ page }) => {
+  const { api, email, password, headers, id } = await seedUser();
   const res = await api.post(`/api/v1/assessments/${id}/measurements`, {
     headers,
     data: {
@@ -80,11 +93,7 @@ test('a partial finger scan explains each vital that has no value', async ({ pag
   expect(res.ok()).toBeTruthy();
   expect((await res.json()).status).toBe('partial');
 
-  await page.goto('/sign-in');
-  await page.getByTestId('email').fill(email);
-  await page.getByTestId('password').fill(password);
-  await page.getByTestId('sign-in-submit').click();
-  await expect(page.getByTestId('screen-today')).toBeVisible();
+  await signIn(page, email, password);
 
   // Today: last assessment tiles carry the specific reason.
   await expect(page.getByTestId('vital-heart_rate')).toContainText('86');
@@ -108,5 +117,43 @@ test('a partial finger scan explains each vital that has no value', async ({ pag
     await page.getByTestId('missing-vitals').scrollIntoViewIfNeeded();
     await page.getByTestId('missing-vitals').screenshot({ path: `${shots}/vitals-why.png` });
   }
+  await api.dispose();
+});
+
+test('a low-confidence heart rate is labelled and explained', async ({ page }) => {
+  const { api, email, password, headers, id } = await seedUser();
+  const face = (
+    metric: string,
+    value: number | null,
+    unit: string,
+    reason: string | null,
+    flags: string[],
+  ) => ({
+    ...m(metric, value, unit, reason),
+    method: 'camera_rppg',
+    quality_flags: flags,
+  });
+  const res = await api.post(`/api/v1/assessments/${id}/measurements`, {
+    headers,
+    data: {
+      outcome: 'completed',
+      measurements: [
+        face('heart_rate', 61, 'bpm', null, ['window_consensus', 'low_confidence', 'grade_low']),
+        face('hrv', null, 'ms', 'low_signal_quality', ['heart_rate_low_confidence']),
+        face('breathing_rate', null, '/min', 'low_signal_quality', ['heart_rate_low_confidence']),
+        face('spo2', null, '%', 'unsupported_method', []),
+        face('blood_pressure', null, 'mmHg', 'unsupported_method', []),
+      ],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  await signIn(page, email, password);
+  await expect(page.getByTestId('vital-heart_rate')).toContainText('Low confidence');
+
+  await page.goto(`/assessment/results?id=${id}`);
+  await expect(page.getByTestId('low-heart_rate')).toHaveText('Low confidence');
+  await expect(page.getByTestId('missing-low-heart_rate')).toContainText('rough reading');
+  await expect(page.getByTestId('missing-hrv')).toContainText('low-confidence');
+  if (shots) await page.screenshot({ path: `${shots}/vitals-low-confidence.png` });
   await api.dispose();
 });

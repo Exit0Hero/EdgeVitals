@@ -109,3 +109,12 @@ How to read the summary lines:
   A real pulse is roughly 0.1-0.5%. Several % means motion, auto-exposure or
   lighting flicker dominates.
 - **Biggest brightness jump** above ~1% points to auto-exposure steps.
+
+### Low-confidence estimates and scan advice (ADR 0012)
+
+None of these has been tried on a phone yet.
+
+1. A still face scan in dim indoor light: when the strict checks abstain but a steady pulse exists, results show heart rate with a "Low confidence" pill and an "About these readings" card. PRV and breathing say why they were withheld.
+2. The same scan's results show "What to change next time", naming the measured frame rate, face-lost share or pulse SNR.
+3. A finger scan with a weak pulse (pressing hard): the card names the pulse strength and the beat-timing error against the 8 ms PRV limit.
+4. After a low-confidence reading, Today's baseline day count and the Recovery and Stress scores do not change because of it.

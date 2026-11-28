@@ -6,6 +6,10 @@
  * coarse grade:
  *  - `rejected`: the metric abstained or was invalid; there is no value.
  *  - `fair`: every gate passed.
+ *  - `low`: the strict gates abstained, but a documented lower-confidence
+ *    rule (calibrated on simulated pulseless captures) passed. The value is
+ *    shown with a "Low confidence" label, never feeds the baseline, and is
+ *    not used for scores.
  *  - `good`: every gate passed with margin. That means pulse SNR at least
  *    6 dB above the gate, no artefact windows, at most 2% dropped frames and
  *    2% interpolation, at least 25 fps, and, where regions were analysed, two
@@ -20,7 +24,7 @@
  */
 import type { MetricStatus, UnavailableReason } from './types';
 
-export type QualityGrade = 'good' | 'fair' | 'rejected';
+export type QualityGrade = 'good' | 'fair' | 'low' | 'rejected';
 
 export type QualityComponentId =
   | 'lighting'

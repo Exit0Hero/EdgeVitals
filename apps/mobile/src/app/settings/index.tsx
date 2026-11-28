@@ -26,15 +26,38 @@ import {
 import { saveExport } from '../../lib/saveExport';
 import { getExperimentalSpo2, setExperimentalSpo2 } from '../../lib/experimental';
 import { useSession } from '../../state/session';
-import { colors, space } from '../../theme/tokens';
+import { colors, radius, shadow, space } from '../../theme/tokens';
 
+/** A titled group: small section label above a white, softly raised panel. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <View style={{ marginBottom: space[6] }}>
-      <T variant="heading" accessibilityRole="header" style={{ marginBottom: space[3] }}>
+    <View style={{ marginBottom: space[5] }}>
+      <T
+        variant="small"
+        accessibilityRole="header"
+        color={colors.muted}
+        style={{
+          marginBottom: space[2],
+          marginLeft: space[1],
+          fontWeight: '700',
+          textTransform: 'uppercase',
+          letterSpacing: 0.6,
+        }}
+      >
         {title}
       </T>
-      {children}
+      <View
+        style={{
+          backgroundColor: colors.white,
+          borderRadius: radius.card,
+          borderWidth: 1,
+          borderColor: '#ECEEF2',
+          padding: space[4],
+          ...shadow.card,
+        }}
+      >
+        {children}
+      </View>
     </View>
   );
 }

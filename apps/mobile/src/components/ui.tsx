@@ -18,7 +18,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, MIN_TOUCH, radius, space, type } from '../theme/tokens';
+import { colors, MIN_TOUCH, radius, shadow, space, type } from '../theme/tokens';
 import { Icon, type IconName } from './Icon';
 
 export function T({
@@ -568,13 +568,14 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space[5],
+    ...shadow.button,
   },
-  primaryDisabled: { backgroundColor: '#9DB6EC' },
+  primaryDisabled: { backgroundColor: '#9DB6EC', shadowOpacity: 0, elevation: 0 },
   header: { flexDirection: 'row', alignItems: 'center', minHeight: 48, marginBottom: space[2] },
   backBtn: { width: MIN_TOUCH, height: MIN_TOUCH, justifyContent: 'center' },
   stepBar: { height: 3, borderRadius: 2 },
   card: { borderRadius: radius.card, padding: space[4] },
-  cardBorder: { borderWidth: 1, borderColor: colors.border },
+  cardBorder: { borderWidth: 1, borderColor: '#ECEEF2', ...shadow.card },
   consent: {
     flexDirection: 'row',
     gap: space[3],

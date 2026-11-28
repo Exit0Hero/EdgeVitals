@@ -229,3 +229,24 @@ describe('30-day report', () => {
     expect(computeReportProgress(history(30), at(day(29)), 'UTC').unlocked).toBe(true);
   });
 });
+
+describe('low-confidence estimates', () => {
+  it('are kept out of the baseline', () => {
+    const recs = history(14).map((r, i) =>
+      i < 10
+        ? {
+            ...r,
+            measurements: r.measurements.map((m) =>
+              m.metric === 'heart_rate' ? { ...m, value: 110, lowConfidence: true } : m,
+            ),
+          }
+        : r,
+    );
+    const hr = computeBaseline(recs, at(day(13)), 'UTC').metrics.find(
+      (m) => m.metric === 'heart_rate',
+    )!;
+    expect(hr.sampleCount).toBe(4);
+    // Only the 4 confident readings count, so the baseline is still collecting.
+    expect(hr.center).toBeNull();
+  });
+});

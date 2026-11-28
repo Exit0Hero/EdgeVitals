@@ -87,7 +87,16 @@ export interface MissingVital {
   status: string;
   reason?: string | null;
   method?: string | null;
+  quality_flags?: string[] | null;
 }
+
+/** Plain explanation of a "Low confidence" label, per vital. */
+export const LOW_CONFIDENCE_COPY: Record<string, string> = {
+  heart_rate:
+    'The strict checks could not confirm this heart rate, but a simpler single-method check found the same steady rhythm through most of the scan. Treat it as a rough reading. It is not added to your baseline or scores.',
+  breathing_rate:
+    'Two breathing signals agreed closely, but the rhythm was less clear than a confident reading needs. Treat it as a rough reading. It is not added to your baseline or scores.',
+};
 
 /**
  * One plain sentence on why a vital has no value and what the person can do.
@@ -95,7 +104,7 @@ export interface MissingVital {
  */
 export function missingExplanation(
   v: MissingVital,
-  ctx: { heartRateValid: boolean; fingerScan: boolean },
+  ctx: { heartRateValid: boolean; fingerScan: boolean; heartRateLowConfidence?: boolean },
 ): string | null {
   if (v.status === 'valid' || v.status === 'simulated' || v.reason === 'cancelled') return null;
   const r = v.reason ?? 'low_signal_quality';
@@ -107,6 +116,8 @@ export function missingExplanation(
         : 'The pulse in the camera signal was too weak or unsteady to count reliably.';
     case 'hrv':
       if (!ctx.heartRateValid) return null;
+      if (ctx.heartRateLowConfidence)
+        return 'Heart rate only came through as a low-confidence estimate, and PRV needs a much stronger pulse than that, so it was withheld.';
       if (r === 'insufficient_duration')
         return 'PRV needs a longer steady stretch than heart rate. Keep still until the scan ends.';
       if (r === 'inconsistent_estimates')
@@ -116,6 +127,8 @@ export function missingExplanation(
       return 'Heart rate passed, but PRV needs the exact timing of every beat and this signal was not clean enough. A steadier scan helps.';
     case 'breathing_rate':
       if (!ctx.heartRateValid && r !== 'insufficient_duration') return null;
+      if (ctx.heartRateLowConfidence && r !== 'insufficient_duration')
+        return 'The pulse was too faint to read the breathing rhythm from it, so breathing was withheld.';
       if (r === 'insufficient_duration')
         return 'Breathing rate needs a longer steady stretch. Keep still until the scan ends.';
       if (r === 'inconsistent_estimates')
