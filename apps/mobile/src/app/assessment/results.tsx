@@ -238,7 +238,7 @@ export default function Results() {
             const s = scores?.[k] ?? null;
             const desc =
               k === 'recovery'
-                ? 'HRV and resting heart rate compared with your usual'
+                ? 'PRV and resting heart rate compared with your usual'
                 : 'Heart rhythm and how you said you feel, compared with your usual';
             return (
               <Card key={k} style={{ flex: 1 }} testID={`result-${k}`}>
@@ -327,8 +327,9 @@ export default function Results() {
       >
         <Icon name="shield" size={18} color={colors.textSecondary} />
         <T variant="small" color={colors.textSecondary} style={{ flex: 1 }}>
-          Wellness information only, not for diagnosis. Heart rate, HRV and breathing are{' '}
-          {fingerScan ? 'finger-scan' : 'camera'} estimates that have not been clinically validated.{' '}
+          Wellness information only, not for diagnosis. Heart rate, pulse-rate variability (PRV) and
+          breathing are {fingerScan ? 'finger-scan' : 'camera'} estimates that have not been
+          clinically validated.{' '}
           {sdkVitals
             ? 'SpO₂ and blood pressure are wellness estimates from a licensed camera SDK. EdgeVitals has not validated them, and they are not a substitute for a pulse oximeter or blood-pressure cuff.'
             : experimentalSpo2

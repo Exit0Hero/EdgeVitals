@@ -7,7 +7,7 @@ import { Card, T } from './ui';
 
 /**
  * Finger scan results extras: the last seconds of the measured pulse with
- * the beats the app detected, and the HRV detail behind the headline value.
+ * the beats the app detected, and the PRV detail behind the headline value.
  * Kept on the device only (from the in-memory scan result).
  */
 export function FingerPulseCard({ result }: { result: SessionResult }) {
@@ -27,7 +27,7 @@ export function FingerPulseCard({ result }: { result: SessionResult }) {
         Your pulse
       </T>
       <T variant="small" color={colors.muted} style={{ marginBottom: space[2] }}>
-        The last {seconds} seconds from your fingertip. Dots mark the beats used for HRV.
+        The last {seconds} seconds from your fingertip. Dots mark the beats used for PRV.
       </T>
       <View onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)}>
         {w > 0 ? (

@@ -6,7 +6,7 @@ import { expect, request, test } from '@playwright/test';
  *
  * TEST FIXTURES ONLY: hand-written values submitted to the local API and
  * labelled `algorithm_name: 'e2e-fixture'`. They are not measurements. The
- * shape copies a real finger scan where heart rate passed and HRV and
+ * shape copies a real finger scan where heart rate passed and PRV and
  * breathing were withheld for signal quality.
  */
 const API = process.env.E2E_API_URL ?? 'http://localhost:4000';

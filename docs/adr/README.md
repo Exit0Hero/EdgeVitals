@@ -10,3 +10,4 @@
 | [0008](0008-experimental-camera-spo2.md)         | Opt-in experimental camera SpO₂ (Bal 2015 ratio of ratios); no camera BP              | Accepted                                |
 | [0009](0009-health-app-sync.md)                  | Read-only SpO₂ and blood pressure from Health Connect / Apple Health                  | Accepted                                |
 | [0010](0010-finger-scan-and-motion-breathing.md) | Finger-on-camera scan (HR, HRV, breathing) and face-scan breathing from head movement | Accepted (untested on devices)          |
+| [0011](0011-face-scan-fusion-prv-quality.md)     | Face-scan v0.4: multi-method HR fusion, PRV, breathing fusion, quality grades         | Proposed (synthetic verification only)  |

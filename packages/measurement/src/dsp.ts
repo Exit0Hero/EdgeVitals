@@ -167,8 +167,12 @@ export function fft(re: Float64Array, im: Float64Array): void {
     for (; j & bit; bit >>= 1) j ^= bit;
     j ^= bit;
     if (i < j) {
-      [re[i], re[j]] = [re[j]!, re[i]!];
-      [im[i], im[j]] = [im[j]!, im[i]!];
+      const tr = re[i]!;
+      re[i] = re[j]!;
+      re[j] = tr;
+      const ti = im[i]!;
+      im[i] = im[j]!;
+      im[j] = ti;
     }
   }
   for (let len = 2; len <= n; len <<= 1) {
@@ -304,4 +308,197 @@ export function findPeaks(x: ArrayLike<number>, minDistance: number): number[] {
     const denom = a - 2 * b + c;
     return denom === 0 ? i : i + (0.5 * (a - c)) / denom;
   });
+}
+
+/**
+ * Butterworth band-pass of configurable order (an even number: `order / 2`
+ * high-pass and `order / 2` low-pass 2nd-order sections), zero-phase. Order
+ * 2 equals `bandpass`. Cascading identical biquads is not an exact
+ * higher-order Butterworth (the corner sags by 3 dB per extra section), which
+ * is acceptable here because the band edges sit well outside the cardiac
+ * peak; the point is steeper roll-off of breathing and drift.
+ */
+export function bandpassOrder(
+  x: ArrayLike<number>,
+  lowHz: number,
+  highHz: number,
+  fs: number,
+  order: 2 | 4 | 6 = 2,
+): number[] {
+  const sections: Biquad[] = [];
+  for (let i = 0; i < order / 2; i++) sections.push(butterHighpass(lowHz, fs));
+  for (let i = 0; i < order / 2; i++) sections.push(butterLowpass(highHz, fs));
+  return filtfilt(x, sections);
+}
+
+/**
+ * Smoothness-priors detrending (Tarvainen, Ranta-aho & Karjalainen, IEEE
+ * TBME 2002). Removes the slow trend z_trend = (I + λ² D2ᵀD2)⁻¹ z, where D2 is
+ * the second-difference operator, and returns z - z_trend. It acts as a
+ * time-varying high-pass filter whose half-power frequency is about
+ * `cutoffHz`; λ is derived from it as 1 / (2 - 2 cos(2π fc / fs)). Solved in
+ * O(n) with a symmetric pentadiagonal LDLᵀ factorisation.
+ */
+export function detrendSmoothnessPriors(
+  x: ArrayLike<number>,
+  fs: number,
+  cutoffHz: number,
+): number[] {
+  const n = x.length;
+  if (n < 5) return Array.from(x, (v) => v - mean(x));
+  const lambda = 1 / (2 - 2 * Math.cos((2 * Math.PI * cutoffHz) / fs));
+  const l2 = lambda * lambda;
+  // Bands of A = I + λ² D2ᵀ D2: diagonal d0, first and second off-diagonals d1, d2.
+  const d0 = new Float64Array(n).fill(1);
+  const d1 = new Float64Array(n);
+  const d2 = new Float64Array(n);
+  const c = [1, -2, 1];
+  for (let j = 0; j < n - 2; j++) {
+    for (let a = 0; a < 3; a++) {
+      d0[j + a] = d0[j + a]! + l2 * c[a]! * c[a]!;
+      if (a < 2) d1[j + a] = d1[j + a]! + l2 * c[a]! * c[a + 1]!;
+      if (a < 1) d2[j + a] = d2[j + a]! + l2 * c[a]! * c[a + 2]!;
+    }
+  }
+  // LDLᵀ for a symmetric pentadiagonal matrix: L has unit diagonal and two sub-diagonals.
+  const D = new Float64Array(n);
+  const L1 = new Float64Array(n); // L[i+1][i]
+  const L2 = new Float64Array(n); // L[i+2][i]
+  for (let i = 0; i < n; i++) {
+    let di = d0[i]!;
+    if (i >= 1) di -= L1[i - 1]! * L1[i - 1]! * D[i - 1]!;
+    if (i >= 2) di -= L2[i - 2]! * L2[i - 2]! * D[i - 2]!;
+    D[i] = di;
+    if (i + 1 < n) {
+      let v = d1[i]!;
+      if (i >= 1) v -= L2[i - 1]! * L1[i - 1]! * D[i - 1]!;
+      L1[i] = v / di;
+    }
+    if (i + 2 < n) L2[i] = d2[i]! / di;
+  }
+  const y = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let v = x[i]!;
+    if (i >= 1) v -= L1[i - 1]! * y[i - 1]!;
+    if (i >= 2) v -= L2[i - 2]! * y[i - 2]!;
+    y[i] = v;
+  }
+  for (let i = 0; i < n; i++) y[i] = y[i]! / D[i]!;
+  const trend = new Float64Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let v = y[i]!;
+    if (i + 1 < n) v -= L1[i]! * trend[i + 1]!;
+    if (i + 2 < n) v -= L2[i]! * trend[i + 2]!;
+    trend[i] = v;
+  }
+  return Array.from(x, (v, i) => v - trend[i]!);
+}
+
+/**
+ * Normalised autocorrelation of a (zero-meaned) signal for lags
+ * `minLag..maxLag` samples. r[k] = Σ x[i] x[i+k] / Σ x[i]², so r[0] = 1.
+ * Returns zeros for a zero-variance signal.
+ */
+export function autocorrelation(x: ArrayLike<number>, maxLag: number): number[] {
+  const n = x.length;
+  const m = mean(x);
+  let e = 0;
+  for (let i = 0; i < n; i++) e += (x[i]! - m) ** 2;
+  const out = new Array<number>(Math.min(maxLag, n - 1) + 1).fill(0);
+  if (!(e > 0)) return out;
+  for (let k = 0; k < out.length; k++) {
+    let s = 0;
+    for (let i = 0; i + k < n; i++) s += (x[i]! - m) * (x[i + k]! - m);
+    out[k] = s / e;
+  }
+  return out;
+}
+
+/**
+ * Pulse rate from the autocorrelation of a pulse signal: the first local
+ * maximum in the lag range for `bandHz` whose height reaches 85% of the
+ * highest maximum in that range (so a beat period wins over its multiples),
+ * refined by parabolic interpolation. `strength` is that autocorrelation
+ * value (−1..1); weak peaks mean the signal is not periodic.
+ */
+export function autocorrelationRate(
+  x: ArrayLike<number>,
+  fs: number,
+  bandHz: [number, number],
+): { bpm: number; strength: number } | null {
+  const minLag = Math.max(1, Math.floor(fs / bandHz[1]));
+  const maxLag = Math.ceil(fs / bandHz[0]);
+  const r = autocorrelation(x, maxLag + 1);
+  return acfPeak(r, fs, minLag, maxLag);
+}
+
+/** Pick the beat-period peak of an autocorrelation sequence (see autocorrelationRate). */
+export function acfPeak(
+  r: ArrayLike<number>,
+  fs: number,
+  minLag: number,
+  maxLag: number,
+): { bpm: number; strength: number } | null {
+  const peaks: number[] = [];
+  for (let k = Math.max(1, minLag); k <= Math.min(maxLag, r.length - 2); k++) {
+    if (r[k]! > r[k - 1]! && r[k]! >= r[k + 1]!) peaks.push(k);
+  }
+  if (!peaks.length) return null;
+  const top = Math.max(...peaks.map((k) => r[k]!));
+  if (!(top > 0)) return null;
+  const k = peaks.find((p) => r[p]! >= 0.85 * top)!;
+  const a = r[k - 1]!,
+    b = r[k]!,
+    c = r[k + 1]!;
+  const denom = a - 2 * b + c;
+  const lag = denom === 0 ? k : k + (0.5 * (a - c)) / denom;
+  return { bpm: (60 * fs) / lag, strength: b };
+}
+
+/**
+ * Reusable Welch estimator for many spectra of the same segment length and
+ * FFT size (the heart-rate fusion computes hundreds per scan). Same result
+ * as `welch` (Hann window, 50% overlap, per-segment mean removal), with the
+ * window, frequency axis and FFT buffers allocated once.
+ */
+export interface WelchPlan {
+  segLen: number;
+  size: number;
+  fs: number;
+  freqs: number[];
+  /** Power spectrum of x[start, end), averaged over 50%-overlapping segments. */
+  run(x: ArrayLike<number>, start?: number, end?: number): Float64Array;
+}
+
+export function createWelchPlan(fs: number, segLen: number, nfft: number): WelchPlan {
+  const size = nextPow2(Math.max(nfft, segLen));
+  const win = hann(segLen);
+  const half = size / 2 + 1;
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  const freqs = Array.from({ length: half }, (_, k) => (k * fs) / size);
+  const step = Math.max(1, Math.floor(segLen / 2));
+  return {
+    segLen,
+    size,
+    fs,
+    freqs,
+    run(x, start = 0, end = x.length) {
+      const acc = new Float64Array(half);
+      let segments = 0;
+      for (let s = start; s + segLen <= end; s += step) {
+        let m = 0;
+        for (let i = 0; i < segLen; i++) m += x[s + i]!;
+        m /= segLen;
+        re.fill(0);
+        im.fill(0);
+        for (let i = 0; i < segLen; i++) re[i] = (x[s + i]! - m) * win[i]!;
+        fft(re, im);
+        for (let k = 0; k < half; k++) acc[k] = acc[k]! + re[k]! * re[k]! + im[k]! * im[k]!;
+        segments++;
+      }
+      if (segments > 1) for (let k = 0; k < half; k++) acc[k] = acc[k]! / segments;
+      return acc;
+    },
+  };
 }

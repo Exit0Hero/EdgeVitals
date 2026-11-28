@@ -3,13 +3,16 @@ import type { Tone } from '../components/ui';
 
 export const METRIC_SHORT: Record<string, string> = {
   heart_rate: 'Heart rate',
-  hrv: 'HRV',
+  hrv: 'PRV',
   breathing_rate: 'Breathing',
   spo2: 'SpO₂',
   blood_pressure: 'Blood pressure',
 };
 export const METRIC_LONG: Record<string, string> = {
   ...METRIC_SHORT,
+  // Camera and fingertip beats are pulse intervals, not ECG R-R intervals, so
+  // the interval metric is pulse-rate variability (metric id stays 'hrv').
+  hrv: 'Pulse-rate variability (PRV)',
   breathing_rate: 'Breathing rate',
 };
 export const METRIC_UNIT: Record<string, string> = {
@@ -105,12 +108,12 @@ export function missingExplanation(
     case 'hrv':
       if (!ctx.heartRateValid) return null;
       if (r === 'insufficient_duration')
-        return 'HRV needs a longer steady stretch than heart rate. Keep still until the scan ends.';
+        return 'PRV needs a longer steady stretch than heart rate. Keep still until the scan ends.';
       if (r === 'inconsistent_estimates')
-        return 'The timing of the individual beats did not match the heart rate, so HRV was withheld.';
+        return 'The timing of the individual beats did not match the heart rate, so PRV was withheld.';
       if (r === 'out_of_operating_range')
-        return 'The HRV estimate fell outside the range the app can measure, so it was withheld.';
-      return 'Heart rate passed, but HRV needs the exact timing of every beat and this signal was not clean enough. A steadier scan helps.';
+        return 'The PRV estimate fell outside the range the app can measure, so it was withheld.';
+      return 'Heart rate passed, but PRV needs the exact timing of every beat and this signal was not clean enough. A steadier scan helps.';
     case 'breathing_rate':
       if (!ctx.heartRateValid && r !== 'insufficient_duration') return null;
       if (r === 'insufficient_duration')

@@ -75,9 +75,29 @@ When a scan fails, the results screen opens **Scan details**. Besides the
 summary it offers **Share signal trace**: one line per camera frame with the
 time since the previous frame, the mean skin colour and the skin-pixel count
 (trace v3 adds mean ROI luma, face width and r/g/b for the forehead, left cheek
-and right cheek separately). The first line records
-whether auto-exposure and white balance were locked (`exposure_lock=`).
-It holds no images and is only shared when the tester taps the button.
+and right cheek separately; trace v4 adds the face box position and height and,
+per region, the skin-pixel count, luma and clipped share). The first line records
+whether auto-exposure and white balance were locked (`exposure_lock=`) and, for
+the face scan, the frame rate requested from the camera and the one it reported
+selecting (`requested_fps=`, `selected_fps=`; `na` when unknown). A trace can be
+replayed offline with
+`npm run validate -w @edgevitals/measurement -- --trace <file> --ref-hr <bpm>`.
+
+### Face scan v0.4 checks still to run on a device (ADR 0011)
+
+None of these has been tried on a phone yet.
+
+- Frame rate: does the front camera honour the 30 fps request? Compare
+  `selected_fps` with the measured median fps in Scan details. Then build with
+  `EXPO_PUBLIC_FACE_SCAN_FPS=60` and check whether 60 fps is delivered evenly
+  or the frame thread starts dropping frames.
+- Landmarks: ML Kit landmark detection runs on every frame. Compare the
+  measured fps with landmarks on and with `EXPO_PUBLIC_FACE_LANDMARKS=0`.
+  Check in a trace that the per-region pixel counts stay steady while the face
+  is still.
+- Interim analysis time on the JS thread (about 26 ms in Node on a laptop;
+  unknown on the phone). If the countdown stutters, this is the first suspect.
+  It holds no images and is only shared when the tester taps the button.
 
 How to read the summary lines:
 

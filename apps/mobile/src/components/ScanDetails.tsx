@@ -42,20 +42,20 @@ export function describeScan(r: SessionResult): string[] {
   const f = d.finger;
   if (r.scanType === 'finger' && f) {
     lines.push(
-      `Finger scan · usable frames ${Math.round(d.usableFrameFraction * 100)}% · clean stretch ${d.usableDurationSec.toFixed(1)} s (15 s for heart rate, 30 s for HRV and breathing)`,
+      `Finger scan · usable frames ${Math.round(d.usableFrameFraction * 100)}% · clean stretch ${d.usableDurationSec.toFixed(1)} s (15 s for heart rate, 30 s for PRV and breathing)`,
     );
     lines.push(
       `Lens covered: ${f.meanCoverage === null ? '—' : `${Math.round(f.meanCoverage * 100)}%`} of the image · red clipped in ${Math.round(f.redClippedFraction * 100)}% of frames · channel used: ${f.channel ?? 'none'}`,
     );
     const c = f.channelSnrDb;
     lines.push(
-      `Pulse SNR: ${d.hrSnrDb ?? '—'} dB (needs ≥ 6; HRV ≥ 8) · red ${c.r ?? '—'} · green ${c.g ?? '—'} · blue ${c.b ?? '—'}`,
+      `Pulse SNR: ${d.hrSnrDb ?? '—'} dB (needs ≥ 6; PRV ≥ 8) · red ${c.r ?? '—'} · green ${c.g ?? '—'} · blue ${c.b ?? '—'}`,
     );
     lines.push(
-      `Beats: ${d.ibiCount} intervals, ${d.ibiAcceptedFraction === null ? '—' : `${Math.round(d.ibiAcceptedFraction * 100)}%`} accepted (HR needs ≥ 80%, HRV ≥ 85%) · beat HR ${f.beatMeanHrBpm ?? '—'} bpm · halves differ ${f.halvesDiffBpm ?? '—'} bpm (needs ≤ 5)`,
+      `Beats: ${d.ibiCount} intervals, ${d.ibiAcceptedFraction === null ? '—' : `${Math.round(d.ibiAcceptedFraction * 100)}%`} accepted (HR needs ≥ 80%, PRV ≥ 85%) · beat HR ${f.beatMeanHrBpm ?? '—'} bpm · halves differ ${f.halvesDiffBpm ?? '—'} bpm (needs ≤ 5)`,
     );
     lines.push(
-      `Beat timing error: ~${f.timingNoiseMs ?? '—'} ms (HRV needs ≤ ${f.timingLimitMs ?? '—'}) · pulse strength ${f.pulseStrengthPct ?? '—'}% · SDNN ${f.sdnnMs ?? '—'} ms`,
+      `Beat timing error: ~${f.timingNoiseMs ?? '—'} ms (PRV needs ≤ ${f.timingLimitMs ?? '—'}) · pulse strength ${f.pulseStrengthPct ?? '—'}% · SDNN ${f.sdnnMs ?? '—'} ms`,
     );
     lines.push(
       `Breathing signals: ${
@@ -63,7 +63,7 @@ export function describeScan(r: SessionResult): string[] {
           ? f.breathing
               .map(
                 (b) =>
-                  `${b.name === 'riiv' ? 'baseline' : b.name === 'riav' ? 'beat size' : 'beat timing'} ${b.perMin ?? '—'}/min (clarity ${Math.round(b.concentration * 100)}%)`,
+                  `${b.name === 'riiv' ? 'baseline' : b.name === 'riav' ? 'beat size' : b.name === 'head_motion' ? 'head movement' : 'beat timing'} ${b.perMin ?? '—'}/min (clarity ${Math.round(b.concentration * 100)}%)`,
               )
               .join(' · ')
           : 'not analysed'
@@ -78,10 +78,73 @@ export function describeScan(r: SessionResult): string[] {
     return lines;
   }
   lines.push(
-    `Usable frames: ${Math.round(d.usableFrameFraction * 100)}% · longest clean stretch: ${d.usableDurationSec.toFixed(1)} s (15 s needed for heart rate, 30 s for HRV and breathing)`,
+    `Usable frames: ${Math.round(d.usableFrameFraction * 100)}% · longest clean stretch: ${d.usableDurationSec.toFixed(1)} s (15 s needed for heart rate, 30 s for PRV and breathing)`,
   );
+  const a = d.acquisition;
+  if (a) {
+    const asked =
+      a.requestedFps != null
+        ? ` · asked for ${a.requestedFps} fps, camera chose ${a.selectedFps ?? '—'}`
+        : '';
+    lines.push(
+      `Frame rate measured: ${a.medianFps} fps (median)${asked} · dropped ${a.droppedFramePct}% · filled-in ${a.interpolatedPct}% · longest gap ${a.longestGapMs} ms`,
+    );
+  }
+  const h = d.hrFusion;
+  if (h) {
+    const w = h.windows;
+    lines.push(
+      `Window check: ${w.agreeing} of ${w.clean} clean windows agree on ${w.bpm ?? '—'} bpm (needs ${Math.round(w.required * 100)}% of at least 18) · ${w.total - w.clean} windows rejected for movement or lighting`,
+    );
+    lines.push(
+      `Whole-scan peak: ${h.spectral.bpm ?? '—'} bpm · SNR ${h.spectral.snrDb ?? '—'} dB (needs ≥ 3) · beats accepted ${h.spectral.beatAcceptedFraction === null ? '—' : `${Math.round(h.spectral.beatAcceptedFraction * 100)}%`}`,
+    );
+    const support = (rec: Record<string, { bpm: number | null; adequate: boolean } | undefined>) =>
+      Object.entries(rec)
+        .map(([k, v]) => `${k} ${v?.bpm ?? '—'}${v?.adequate ? '' : ' (weak)'}`)
+        .join(' · ');
+    lines.push(`Methods: ${support(h.methods)}`);
+    lines.push(`Areas: ${support(h.regions)}`);
+    lines.push(
+      `Heart rate: ${h.status === 'valid' ? `passed by ${h.path === 'windowed' ? 'window check' : 'whole-scan peak'}` : `withheld (${h.failure ?? h.reason ?? 'no result'})`}`,
+    );
+  }
+  const p = d.prv;
+  if (p) {
+    lines.push(
+      `Pulse intervals (PRV): ${p.acceptedIntervals} accepted, ${p.rejectedIntervals} rejected${
+        Object.keys(p.rejectedByReason).length
+          ? ` (${Object.entries(p.rejectedByReason)
+              .map(([k, n]) => `${k.replace('_', ' ')} ${n}`)
+              .join(', ')})`
+          : ''
+      } · ${p.successivePairs} adjacent pairs`,
+    );
+  }
+  const rs = d.respiration;
+  if (rs) {
+    const names: Record<string, string> = {
+      riiv: 'baseline',
+      riav: 'beat size',
+      rifv: 'beat timing',
+      head_motion: 'head movement',
+    };
+    lines.push(
+      `Breathing signals: ${
+        rs.signals.length
+          ? rs.signals
+              .map(
+                (b) =>
+                  `${names[b.name] ?? b.name} ${b.perMin ?? '—'}/min (clarity ${Math.round(b.concentration * 100)}%)`,
+              )
+              .join(' · ')
+          : 'not analysed'
+      } · two clear signals (≥ 50%) must agree within 2/min`,
+    );
+  }
   const g = d.hrGate;
   if (g) {
+    lines.push('Previous (v0.3) checks, for comparison only:');
     lines.push(
       `Pulse peak: ${g.bpm} bpm · SNR ${g.snrDb} dB (needs ≥ 3) · halves differ ${g.halvesDiffBpm < 0 ? 'n/a' : `${g.halvesDiffBpm} bpm`} (needs ≤ 6)`,
     );

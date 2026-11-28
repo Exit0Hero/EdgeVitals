@@ -4,9 +4,11 @@ import {
   inferPixelStride,
   orientationToRotation,
   holdRoiBox,
+  landmarkRegionFractions,
   smoothFaceBox,
   uprightSize,
   type FaceBox,
+  type FaceLandmarks,
   type FrameInput,
   type RoiSample,
   type Rotation,
@@ -33,7 +35,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { T } from '../components/ui';
 import { setCameraBreadcrumb } from '../lib/crashRecorder';
 import { colors } from '../theme/tokens';
-import { setExposureLock } from './captureNotes';
+import { setCaptureFps, setExposureLock } from './captureNotes';
 import { createTimestampNormalizer } from './timestamps';
 import type { CameraProcessingMode, CameraScannerProps } from './types';
 
@@ -48,13 +50,38 @@ import type { CameraProcessingMode, CameraScannerProps } from './types';
  * docs/native-camera-device-tests.md.
  */
 
+/**
+ * Eye and mouth landmarks place the forehead and cheek regions off the
+ * eyes, brows, nose and lips (roi.ts landmarkRegionFractions). They are only
+ * used when a new held ROI box is set, but ML Kit computes them on every
+ * frame, so they can be switched off (EXPO_PUBLIC_FACE_LANDMARKS=0) if they
+ * cost frame rate on a device. Not yet measured on a physical device.
+ */
+const USE_LANDMARKS = process.env.EXPO_PUBLIC_FACE_LANDMARKS !== '0';
+
 const DETECTOR_OPTIONS: FaceDetectorOptions = {
   performanceMode: 'fast',
   cameraFacing: 'front',
   minFaceSize: 0.2,
+  runLandmarks: USE_LANDMARKS,
   // Boxes stay in ML Kit's upright image coordinates; we map them to the buffer ourselves.
   autoMode: false,
 };
+
+/**
+ * Face-scan frame rate. 30 fps is requested where the front camera supports
+ * it (the pulse needs a regular rate well above 6 Hz; beat timing for PRV
+ * benefits from 30). EXPO_PUBLIC_FACE_SCAN_FPS=60 requests 60 fps instead,
+ * for evaluation only: more frames mean more per-frame work on the frame
+ * thread, and dropFramesWhileBusy may then deliver fewer, irregular frames.
+ * The rate actually delivered is measured from frame timestamps either way.
+ */
+const PREFERRED_FPS = process.env.EXPO_PUBLIC_FACE_SCAN_FPS === '60' ? 60 : 30;
+
+function requestedFps(device: Pick<CameraDevice, 'supportsFPS'>): number | null {
+  for (const fps of PREFERRED_FPS === 60 ? [60, 30] : [30]) if (device.supportsFPS(fps)) return fps;
+  return null;
+}
 
 // ML Kit on iOS is told the frame is mirrored (front camera) and reports
 // coordinates in the mirrored upright image; on Android it ignores mirroring.
@@ -219,6 +246,9 @@ function CameraView({
 }: InnerProps & { outputs: CameraOutput[] }) {
   const ref = useRef<CameraRef>(null);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only the processing stages that sample skin colour ask for a frame rate.
+  const fps = mode === 'full' ? requestedFps(device) : null;
+  const constraints = useMemo(() => (fps ? [{ fps }] : undefined), [fps]);
   useEffect(
     () => () => {
       if (lockTimer.current) clearTimeout(lockTimer.current);
@@ -234,6 +264,11 @@ function CameraView({
       outputs={outputs}
       mirrorMode="auto"
       resizeMode="cover"
+      constraints={constraints}
+      onSessionConfigSelected={(config) => {
+        if (mode === 'full')
+          setCaptureFps({ requested: fps, selected: config.selectedFPS ?? null });
+      }}
       onStarted={() => {
         setCameraBreadcrumb(mode);
         cb.current.onStatus('running');
@@ -386,6 +421,7 @@ function processFrame(
   }
   let roiBox: FaceBox | null = null;
   let skinMask: SkinMask | null = null;
+  let roiRegions: number[][] | null = null;
   // Smooth the primary box across frames (state lives on this frame-thread
   // runtime). A gap of more than 0.5 s starts fresh.
   if (boxes.length > 0) {
@@ -394,6 +430,8 @@ function processFrame(
         box: FaceBox;
         roiBox: FaceBox;
         mask: SkinMask;
+        /** Landmark-placed regions for this held box, or null for the fixed box regions. */
+        regions: number[][] | null;
         ts: number;
         scale: number;
       };
@@ -406,9 +444,32 @@ function processFrame(
     // The skin sample uses a box held still while the face is still, so the
     // same pixels are averaged every frame; the gates still see `smoothed`.
     roiBox = holdRoiBox(fresh ? prevState.roiBox : null, smoothed);
-    // A new held box gets a new skin mask, filled on its first frame.
-    skinMask = fresh && prevState.roiBox === roiBox ? prevState.mask : createSkinMask(roiBox);
-    g.__evFaceBox = { box: smoothed, roiBox, mask: skinMask, ts, scale: TIMESTAMP_SCALE };
+    // A new held box gets a new skin mask, filled on its first frame, and
+    // new landmark regions, placed once and then kept with the box so the
+    // same pixels are averaged while the box is held.
+    const kept = fresh && prevState.roiBox === roiBox;
+    skinMask = kept ? prevState.mask : createSkinMask(roiBox);
+    if (kept) roiRegions = prevState.regions;
+    else if (USE_LANDMARKS) {
+      const lm = faces[0]?.landmarks;
+      const marks: FaceLandmarks = {
+        leftEye: lm?.LEFT_EYE,
+        rightEye: lm?.RIGHT_EYE,
+        noseBase: lm?.NOSE_BASE,
+        mouthLeft: lm?.MOUTH_LEFT,
+        mouthRight: lm?.MOUTH_RIGHT,
+        mouthBottom: lm?.MOUTH_BOTTOM,
+      };
+      roiRegions = landmarkRegionFractions(roiBox, marks);
+    }
+    g.__evFaceBox = {
+      box: smoothed,
+      roiBox,
+      mask: skinMask,
+      regions: roiRegions,
+      ts,
+      scale: TIMESTAMP_SCALE,
+    };
   }
   const up = uprightSize(frame.width, frame.height, rotation);
   if (mode === 'face') {
@@ -464,6 +525,7 @@ function processFrame(
       mirrored,
       2,
       roiBox ? skinMask : null,
+      roiBox ? roiRegions : null,
     );
   }
   scheduleOnRN(deliver, {

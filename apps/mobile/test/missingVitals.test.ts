@@ -11,7 +11,7 @@ describe('why a vital has no value', () => {
     expect(REASON_COPY.insufficient_duration).toBe('Scan too short');
   });
 
-  it('explains HRV withheld after heart rate passed', () => {
+  it('explains PRV withheld after heart rate passed', () => {
     const s = missingExplanation(
       { metric: 'hrv', status: 'unavailable', reason: 'low_signal_quality', method: 'finger_ppg' },
       finger,
@@ -19,7 +19,7 @@ describe('why a vital has no value', () => {
     expect(s).toMatch(/Heart rate passed/);
   });
 
-  it('folds HRV and breathing into the heart-rate line when heart rate failed', () => {
+  it('folds PRV and breathing into the heart-rate line when heart rate failed', () => {
     const ctx = { heartRateValid: false, fingerScan: false };
     expect(
       missingExplanation(

@@ -4,6 +4,8 @@ Date: 2026-11-26 · Status: Accepted (product owner chose "Show as labelled esti
 
 ## Decision
 
+> **Superseded in part by [ADR 0011](0011-face-scan-fusion-prv-quality.md) (config `v0.4-fusion-prv`).** Face-scan heart rate is now a quality-weighted fusion of POS v2, CHROM and PBV over the pooled ROI and each region, and it abstains when they disagree. Camera intervals are reported as pulse-rate variability (PRV, metric id `hrv`). Breathing needs two clear respiratory signals that agree within 2 /min. The labelling rules and "not validated" requirements below still apply. The v0.3 gates are kept in `legacyAnalysis` for comparison only.
+
 | Metric         | Status                                                              | Method                                                                                           |
 | -------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Heart rate     | Shown as **Estimate, not validated** when gates pass                | PBV (de Haan & van Leest 2014) window consensus, or POS (Wang et al. 2017) → Welch spectral peak |

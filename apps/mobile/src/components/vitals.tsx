@@ -164,7 +164,7 @@ export function VitalRows({ vitals }: { vitals: VitalValue[] }) {
 export function VitalChips({ vitals }: { vitals: VitalValue[] }) {
   const short: Record<string, string> = {
     heart_rate: 'HR',
-    hrv: 'HRV',
+    hrv: 'PRV',
     breathing_rate: 'Breathing',
     spo2: 'SpO₂',
     blood_pressure: 'BP',

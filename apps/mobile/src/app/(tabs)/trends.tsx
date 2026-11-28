@@ -16,7 +16,7 @@ const METRICS = [
   { id: 'recovery', label: 'Recovery', title: 'Recovery', unit: '' },
   { id: 'stress', label: 'Stress', title: 'Stress', unit: '' },
   { id: 'energy', label: 'Energy', title: 'Energy', unit: '' },
-  { id: 'hrv', label: 'HRV', title: 'HRV · morning scans', unit: 'ms' },
+  { id: 'hrv', label: 'PRV', title: 'PRV · morning scans', unit: 'ms' },
   { id: 'heart_rate', label: 'Heart rate', title: 'Heart rate · morning scans', unit: 'bpm' },
   {
     id: 'breathing_rate',
