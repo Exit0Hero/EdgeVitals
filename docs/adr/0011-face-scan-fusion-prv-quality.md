@@ -166,6 +166,44 @@ The thresholds were set on simulated recordings: phone-like pulseless noise, whi
 
 Synthetic validation set: 84 recordings, 6 simulated participants × 7 conditions × 20/30 fps. Heart-rate coverage was 41.7% (v0.3: 47.2%) with MAE 0.08 bpm (v0.3: 0.20) and 0 / 12 false acceptances for both. v0.4 abstains on every recording with two head movements in 60 s, because fewer than 18 clean windows remain. v0.3 reported a value on half of them. This trade (fewer readings, no unsupported ones) is deliberate. The synthetic pulse has PBV's exact colour signature and a sinusoidal breathing movement, so it favours PBV and makes breathing look far easier than it is.
 
+## v0.4.1 (2026-11-28): fix false readings from per-region noise
+
+Replaying Kanchan's shared traces and re-running calibration with a new noise model found a fault in v0.4.0. The model gives each of the three regions its own phone-like noise, with no pulse. The windowed path then read a heart rate on about 0.7% of pulseless scans (11 of 1,500 looks, 45 and 75 s).
+
+The cause: stability weighting over 12 candidates (3 methods × 4 regions) picks whichever noise candidate happens to look steady. The fused window votes then just clear the bar, even though no single method agrees with them. The original calibration used a single pooled ROI, so it could not show this.
+
+Changes:
+
+- **Window bar:** raised from 0.55 + 6/w to 0.55 + 6.5/w.
+- **Carrying method:** the windowed path also needs one method on its own (its regions fused with equal weight) to agree with the fused rate in at least 70% of clean windows. Failure code: `no_carrying_method`.
+- **Finish decision:** the first live look after 45 s now fuses all regions, as the final analysis does. A scan the final analysis would accept therefore ends at 45 s instead of running on to 75 s. Only one such look is made, because each extra all-region look is another chance for noise to pass.
+- **Versions:** pipeline 0.2.1, config `v0.4.1-fusion-prv`, fusion 0.1.1.
+
+Results, all synthetic:
+
+| Check                                                 | v0.4.0     | v0.4.1    |
+| ----------------------------------------------------- | ---------- | --------- |
+| False HR, per-region noise, fresh seeds (1,500 looks) | about 0.7% | 0 / 1,500 |
+| False HR, per-region noise, full scan sessions        | 2 / 200    | 0 / 200   |
+| Weak pulse, in-phase regions, read at 45 s            | 38 / 40    | 30 / 40   |
+| Weak pulse, in-phase regions, read at 75 s            | 39 / 40    | 39 / 40   |
+| Weak pulse, in-phase regions, full sessions           | 38 / 40    | 35 / 40   |
+| Weak pulse, pooled ROI, read at 45 s                  | 18 / 20    | 15 / 20   |
+| Weak pulse, pooled ROI, read at 75 s                  | —          | 19 / 20   |
+
+No accepted value was more than 3 bpm off. The 84-recording synthetic validation set is unchanged: 41.7% HR coverage and 0 / 12 false readings.
+
+### Replay of the real traces (iQOO Neo 9, no reference device)
+
+| Trace                        | v0.3                      | v0.4.1                                               |
+| ---------------------------- | ------------------------- | ---------------------------------------------------- |
+| 45 s face, exposure locked   | 61 bpm (16 of 18 windows) | No reading: 15 of 18 windows agree and 17 are needed |
+| 90 s face, exposure unlocked | No reading                | No reading                                           |
+| Finger scan, 73 s            | 86 bpm                    | 86 bpm                                               |
+
+- **45 s locked face trace:** its window votes spread from 53 to 75 bpm. No method reached 70% agreement (best 67%), and the whole-scan SNR was 0.9 dB. In the app this scan would not have ended at 45 s. It would have continued to 75 s, where the bar is lower, but the trace stops at 45 s, so that outcome cannot be replayed.
+- **Finger scan:** PRV and breathing are still withheld. The first 35 s are unsettled (8-9% intensity swings, SNR −1 to 7 dB in 10 s windows), and the last 35 s are clean (14 dB). Even on the clean part alone, the beat-timing error is 8.9 ms against an 8 ms limit, so PRV would still be withheld.
+
 ## Consequences
 
 - Fewer face-scan readings than v0.3 under movement. More readings come from longer still scans (75 s) and better frames (30 fps, landmarks).

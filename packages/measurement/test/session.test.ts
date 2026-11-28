@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ScanSession } from '../src/session';
+import { analyzeSession } from '../src/pipeline';
+import { phoneNoiseRegionsSession } from './fixtures/phoneNoise';
 import { syntheticSession } from './fixtures/synthetic';
 
 describe('ScanSession', () => {
@@ -110,5 +112,21 @@ describe('ScanSession', () => {
     expect(Math.abs(sig.greenPeakBpm! - truth.meanHrBpm)).toBeLessThan(3);
     expect(sig.bandAmplitudePct).toBeGreaterThan(0);
     expect(sig.intervalP90Ms).toBeGreaterThanOrEqual(sig.intervalP10Ms);
+  });
+});
+
+describe('finish decision', () => {
+  it('the all-region look fuses regions; ordinary live looks use the pooled ROI only', () => {
+    const frames = phoneNoiseRegionsSession({
+      seed: 720001,
+      durationSec: 46,
+      pulse: { bpm: 70, amplitude: 0.0008 },
+    });
+    const pooled = analyzeSession(frames, { interim: true }).diagnostics.hrFusion!;
+    const all = analyzeSession(frames, { interim: true, interimRegions: true }).diagnostics
+      .hrFusion!;
+    expect(pooled.regions.forehead).toBeUndefined();
+    expect(all.regions.forehead).toBeDefined();
+    expect(all.regions.left_cheek).toBeDefined();
   });
 });

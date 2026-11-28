@@ -99,11 +99,19 @@ export function describeScan(r: SessionResult): string[] {
     lines.push(
       `Whole-scan peak: ${h.spectral.bpm ?? '—'} bpm · SNR ${h.spectral.snrDb ?? '—'} dB (needs ≥ 3) · beats accepted ${h.spectral.beatAcceptedFraction === null ? '—' : `${Math.round(h.spectral.beatAcceptedFraction * 100)}%`}`,
     );
-    const support = (rec: Record<string, { bpm: number | null; adequate: boolean } | undefined>) =>
+    const support = (
+      rec: Record<
+        string,
+        { bpm: number | null; adequate: boolean; agreement: number | null } | undefined
+      >,
+    ) =>
       Object.entries(rec)
-        .map(([k, v]) => `${k} ${v?.bpm ?? '—'}${v?.adequate ? '' : ' (weak)'}`)
+        .map(
+          ([k, v]) =>
+            `${k} ${v?.bpm ?? '—'}${v?.agreement != null ? ` (${Math.round(v.agreement * 100)}% of windows)` : ''}${v?.adequate ? '' : ' weak'}`,
+        )
         .join(' · ');
-    lines.push(`Methods: ${support(h.methods)}`);
+    lines.push(`Methods: ${support(h.methods)} · one method must agree in ≥ 70% of windows`);
     lines.push(`Areas: ${support(h.regions)}`);
     lines.push(
       `Heart rate: ${h.status === 'valid' ? `passed by ${h.path === 'windowed' ? 'window check' : 'whole-scan peak'}` : `withheld (${h.failure ?? h.reason ?? 'no result'})`}`,

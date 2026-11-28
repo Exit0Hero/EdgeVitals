@@ -37,19 +37,25 @@ describe('window-consensus heart rate', () => {
 
   // Weak pulses in phone-like noise (whole-scan SNR around 0 dB, like the
   // locked-exposure iQOO trace) used to fail the halves and beat checks.
-  it('reads weak pulses in phone-like noise within 2 bpm', () => {
+  // v0.4.1 raised the window bar (hrFusion.ts consensusPerWindow 6.5, after
+  // ~0.7% false readings on per-region noise), so fewer read at 45 s; the
+  // scan extends to 75 s when heart rate has not passed, and most read there.
+  it.each([
+    [45, 15],
+    [75, 18],
+  ])('reads weak pulses in phone-like noise within 2 bpm at %i s', (durationSec, minRead) => {
     let accepted = 0;
     for (let s = 0; s < 20; s++) {
       const bpm = 48 + ((s * 37) % 100);
       const res = analyzeSession(
-        phoneNoiseSession({ seed: 7000 + s, durationSec: 45, pulse: { bpm, amplitude: 0.0008 } }),
+        phoneNoiseSession({ seed: 7000 + s, durationSec, pulse: { bpm, amplitude: 0.0008 } }),
       );
       const hr = hrOf(res);
       if (hr.status !== 'valid') continue;
       accepted++;
       expect(Math.abs(hr.value! - bpm)).toBeLessThanOrEqual(2);
     }
-    expect(accepted).toBeGreaterThanOrEqual(18);
+    expect(accepted).toBeGreaterThanOrEqual(minRead);
   });
 
   it('accepts no heart rate from phone-like noise, at any scan length up to 90 s', () => {
