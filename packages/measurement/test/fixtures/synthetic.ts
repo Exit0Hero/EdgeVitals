@@ -40,6 +40,8 @@ export interface SyntheticOptions {
   seed?: number;
   /** Replace pulse with pure noise. */
   noPulse?: boolean;
+  /** Respiratory intensity modulation (fraction of DC); default 0.003. */
+  respAmplitude?: number;
   /** Relative pulse strength per channel [r, g, b]. */
   pulseVec?: [number, number, number];
 }
@@ -99,7 +101,7 @@ export function syntheticSession(o: SyntheticOptions = {}): SyntheticTruth {
   for (let i = 0; i < n; i++) {
     const t = i / fps + ((o.timingJitterMs ?? 2) / 1000) * gauss(rng);
     const p = o.noPulse ? 0 : pulseAt(t) - 0.55;
-    const resp = 0.003 * Math.sin(2 * Math.PI * fb * t);
+    const resp = (o.respAmplitude ?? 0.003) * Math.sin(2 * Math.PI * fb * t);
     const drift = 0.01 * Math.sin((2 * Math.PI * t) / 40);
     const ch = base.map(
       (c, k) => c * (1 + amp * pulseVec[k]! * p + resp + drift) + noise * gauss(rng),

@@ -131,10 +131,12 @@ export function extractRoiYuv(
   mirrored: boolean,
   step = 2,
   mask: SkinMask | null = null,
+  /** Region rectangles as fractions of the face box (landmarkRegionFractions); default ROI_REGIONS. */
+  regionFractions: number[][] | null = null,
 ): RoiSample {
   'worklet';
-  // Keep in sync with ROI_REGIONS in roi.ts (checked by tests).
-  const regions = [
+  // Keep the default in sync with ROI_REGIONS in roi.ts (checked by tests).
+  const regions = regionFractions ?? [
     [0.3, 0.7, 0.08, 0.24],
     [0.14, 0.38, 0.52, 0.74],
     [0.62, 0.86, 0.52, 0.74],
@@ -151,14 +153,17 @@ export function extractRoiYuv(
     lumaSum = 0,
     clipped = 0,
     k = 0;
-  const per: { r: number; g: number; b: number; n: number }[] = [];
+  const per: { r: number; g: number; b: number; n: number; luma: number; clipped: number }[] = [];
   const useMask = mask !== null && mask.ready;
   const fillMask = mask !== null && !mask.ready;
   for (const reg of regions) {
     let rr = 0,
       rg = 0,
       rb = 0,
-      rn = 0;
+      rn = 0,
+      rs = 0,
+      rl = 0,
+      rc = 0;
     const u0 = Math.max(0, Math.floor(face.x + reg[0]! * face.width));
     const u1 = Math.min(upright.width, Math.ceil(face.x + reg[1]! * face.width));
     const v0 = Math.max(0, Math.floor(face.y + reg[2]! * face.height));
@@ -181,10 +186,16 @@ export function extractRoiYuv(
         const r = Math.min(255, Math.max(0, Y + 1.402 * Cr));
         const g = Math.min(255, Math.max(0, Y - 0.344136 * Cb - 0.714136 * Cr));
         const b = Math.min(255, Math.max(0, Y + 1.772 * Cb));
+        const l = 0.299 * r + 0.587 * g + 0.114 * b;
         sampled++;
-        lumaSum += 0.299 * r + 0.587 * g + 0.114 * b;
+        lumaSum += l;
+        rs++;
+        rl += l;
         const clip = r >= 250 || g >= 250 || b >= 250;
-        if (clip) clipped++;
+        if (clip) {
+          clipped++;
+          rc++;
+        }
         let isSkin: boolean;
         if (useMask) {
           isSkin = k < mask.bits.length && mask.bits[k] === 1;
@@ -208,7 +219,13 @@ export function extractRoiYuv(
     sg += rg;
     sb += rb;
     skin += rn;
-    per.push(rn ? { r: rr / rn, g: rg / rn, b: rb / rn, n: rn } : { r: 0, g: 0, b: 0, n: 0 });
+    const luma = rs ? rl / rs : 0;
+    const clipFrac = rs ? rc / rs : 0;
+    per.push(
+      rn
+        ? { r: rr / rn, g: rg / rn, b: rb / rn, n: rn, luma, clipped: clipFrac }
+        : { r: 0, g: 0, b: 0, n: 0, luma, clipped: clipFrac },
+    );
   }
   if (fillMask) mask.ready = true;
   return {

@@ -5,7 +5,10 @@ import { PrimaryButton, Screen, T, TextButton } from '../components/ui';
 import { colors, radius, space } from '../theme/tokens';
 
 const POINTS: { icon: IconName; text: string }[] = [
-  { icon: 'heart', text: 'Heart rate, HRV, breathing, SpO₂ and blood pressure' },
+  {
+    icon: 'heart',
+    text: 'Heart rate, pulse-rate variability (PRV), breathing, SpO₂ and blood pressure',
+  },
   { icon: 'chart', text: 'Your personal baseline after 14 days' },
   { icon: 'shield', text: 'Wellness insights — not a medical device' },
 ];

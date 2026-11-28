@@ -27,7 +27,7 @@ import { toSubmission } from '../../lib/measurements';
 import { demoMeasurements } from '../../lib/demo';
 import { withSdkVitals } from '../../vitals-sdk';
 import { rememberScan } from '../../state/lastScan';
-import { getExposureLock } from '../../camera/captureNotes';
+import { getCaptureFps, traceHeader } from '../../camera/captureNotes';
 import { getExperimentalSpo2 } from '../../lib/experimental';
 import { useFlow } from '../../state/flow';
 import { colors, space } from '../../theme/tokens';
@@ -42,7 +42,7 @@ const TILE: Record<
 > = {
   heart_rate: { label: 'Heart rate', unit: 'bpm', icon: 'heart' },
   breathing_rate: { label: 'Breathing', unit: 'breaths/min', icon: 'wind' },
-  hrv: { label: 'HRV', unit: 'ms', icon: 'pulse' },
+  hrv: { label: 'PRV', unit: 'ms', icon: 'pulse' },
   spo2: { label: 'SpO₂', unit: '%', icon: 'drop' },
   blood_pressure: { label: 'Blood pressure', unit: 'mmHg', icon: 'chart' },
 };
@@ -119,10 +119,15 @@ export default function Scan() {
       finishing.current = true;
       setPhase('submitting');
       // Taken before finish(), which clears the per-frame buffer.
-      const trace = cancelled
-        ? null
-        : `exposure_lock=${getExposureLock()}\n${session.current.exportTrace()}`;
+      const trace = cancelled ? null : `${traceHeader()}\n${session.current.exportTrace()}`;
       const pipelineResult = cancelled ? session.current.cancel() : session.current.finish();
+      // What the camera was asked for and promised, next to the rate measured from timestamps.
+      const acq = pipelineResult.diagnostics.acquisition;
+      if (acq) {
+        const fps = getCaptureFps();
+        acq.requestedFps = fps.requested;
+        acq.selectedFps = fps.selected;
+      }
       try {
         // SpO2 and BP only ever come from a licensed SDK; without one they stay unavailable.
         const result = cancelled ? pipelineResult : await withSdkVitals(pipelineResult);
@@ -388,7 +393,7 @@ export default function Scan() {
                     ? 'Analysing…'
                     : 'Measuring 3 of 5 vital signs'
               }
-              subtitle={previewOnly ? undefined : 'Heart rate, breathing and HRV'}
+              subtitle={previewOnly ? undefined : 'Heart rate, breathing and PRV'}
               elapsedSec={elapsed}
               elapsedTestID="scan-elapsed"
             />

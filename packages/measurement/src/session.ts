@@ -132,7 +132,7 @@ export class ScanSession {
       last.t - this.lastInterimAt > 2000
     ) {
       this.lastInterimAt = last.t;
-      const res = analyzeSession(this.frames);
+      const res = analyzeSession(this.frames, { interim: true });
       const currentValue = (metric: MetricId) => {
         const result = res.metrics.find((m) => m.metric === metric);
         return result?.status === 'valid' ? result.value : null;
@@ -198,15 +198,19 @@ export class ScanSession {
    * test phone to debug a failed scan. Aggregates only (three numbers per
    * frame), never pixels. Must be called before finish()/cancel().
    *
-   * Format (v3): header line, then one line per frame: dt = ms since the
+   * Format (v4): header line, then one line per frame: dt = ms since the
    * previous frame, r/g/b = mean skin colour x100, usable (1/0), skin pixels
    * averaged, mean ROI luma x10, face box width in px, then r/g/b x100 for the
-   * forehead, left cheek and right cheek. Missing values are 0.
+   * forehead, left cheek and right cheek, then face box x, y and height in px,
+   * then skin pixels, luma x10 and clipped fraction x1000 for each region.
+   * Columns 0-16 are unchanged from v3. Missing values are 0. Read by
+   * validation/recording.ts `parseTrace`.
    */
   exportTrace(): string {
     const lines = [
-      'edgevitals-trace v3 dt_ms,r100,g100,b100,usable,skin_px,luma10,face_w,' +
-        'fh_r,fh_g,fh_b,lc_r,lc_g,lc_b,rc_r,rc_g,rc_b',
+      'edgevitals-trace v4 dt_ms,r100,g100,b100,usable,skin_px,luma10,face_w,' +
+        'fh_r,fh_g,fh_b,lc_r,lc_g,lc_b,rc_r,rc_g,rc_b,face_x,face_y,face_h,' +
+        'fh_n,fh_luma10,fh_clip1000,lc_n,lc_luma10,lc_clip1000,rc_n,rc_luma10,rc_clip1000',
     ];
     const x100 = (v: number | undefined) => Math.round((v ?? 0) * 100);
     let prev: number | null = null;
@@ -227,6 +231,19 @@ export class ScanSession {
       for (let k = 0; k < 3; k++) {
         const reg = c?.regions?.[k];
         cols.push(x100(reg?.r), x100(reg?.g), x100(reg?.b));
+      }
+      cols.push(
+        Math.round(f.face?.x ?? 0),
+        Math.round(f.face?.y ?? 0),
+        Math.round(f.face?.height ?? 0),
+      );
+      for (let k = 0; k < 3; k++) {
+        const reg = c?.regions?.[k];
+        cols.push(
+          reg?.n ?? 0,
+          Math.round((reg?.luma ?? 0) * 10),
+          Math.round((reg?.clipped ?? 0) * 1000),
+        );
       }
       lines.push(cols.join(','));
     }

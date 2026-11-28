@@ -15,7 +15,7 @@ function joinNames(names: string[]) {
 /**
  * Results: one plain line for each vital that has no value, saying why and
  * what to do, so no row is left as an unexplained dash. When heart rate fails,
- * HRV and breathing (which depend on the same pulse) share its line.
+ * PRV and breathing (which depend on the same pulse) share its line.
  */
 export function MissingVitals({
   vitals,

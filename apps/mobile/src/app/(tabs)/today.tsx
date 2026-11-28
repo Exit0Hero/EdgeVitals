@@ -393,7 +393,7 @@ function MatureSections({ data }: { data: Dashboard }) {
           </Card>
           <Card style={{ flex: 1 }}>
             <T variant="small" color={colors.muted}>
-              HRV
+              PRV
             </T>
             <T variant="heading">{hrv ? `${hrv.first} → ${hrv.recent} ms` : '—'}</T>
             {hrv && hrv.first > 0 && hrv.recent !== hrv.first ? (

@@ -59,7 +59,7 @@ const OPTIONS: {
     title: 'Finger scan',
     camera: 'Back camera and flash · about 1 min',
     detail:
-      'Uses the back camera and flash. The signal is much stronger, so it gives a reading far more often, including HRV and breathing.',
+      'Uses the back camera and flash. The signal is much stronger, so it gives a reading far more often, including PRV and breathing.',
     recommended: true,
   },
   {
@@ -68,7 +68,7 @@ const OPTIONS: {
     title: 'Face scan',
     camera: 'Front camera · 45 to 75 s',
     detail:
-      'Uses the front camera. The signal is weak, so it only works with the phone propped up and your head still. HRV and breathing rarely come through.',
+      'Uses the front camera. The signal is weak, so it only works with the phone propped up and your head still. PRV and breathing rarely come through.',
   },
 ];
 

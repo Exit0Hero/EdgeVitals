@@ -42,7 +42,7 @@ type Phase = 'camera' | 'scanning' | 'submitting' | 'interrupted';
 
 const TILES = [
   ['heart_rate', 'Heart rate', 'bpm', 'heart'],
-  ['hrv', 'HRV', 'ms', 'pulse'],
+  ['hrv', 'PRV', 'ms', 'pulse'],
   ['breathing_rate', 'Breathing', 'breaths/min', 'wind'],
 ] as const;
 
@@ -354,7 +354,7 @@ export default function FingerScan() {
           <ScanSheet testID="finger-scan-card">
             <SheetHeader
               title={phase === 'submitting' ? 'Analysing…' : 'Measuring 3 vital signs'}
-              subtitle="Heart rate, HRV and breathing"
+              subtitle="Heart rate, PRV and breathing"
               elapsedSec={elapsed}
             />
             <SignalProgress

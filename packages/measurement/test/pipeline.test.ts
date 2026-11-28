@@ -6,20 +6,36 @@ const byMetric = (res: ReturnType<typeof analyzeSession>, m: string) =>
   res.metrics.find((x) => x.metric === m)!;
 
 describe('rPPG pipeline on synthetic ground truth', () => {
-  it.each([1, 2, 3, 4])(
-    'recovers HR, HRV and breathing from a high-SNR 45 s signal (seed %i)',
-    (seed) => {
+  it.each([1, 2, 3, 4])('recovers HR and PRV from a high-SNR 45 s signal (seed %i)', (seed) => {
+    const truth = syntheticSession({ heartRateBpm: 66, breathingPerMin: 15, noise: 0.03, seed });
+    const res = analyzeSession(truth.frames);
+    expect(byMetric(res, 'heart_rate').value!).toBeGreaterThanOrEqual(truth.meanHrBpm - 2);
+    expect(byMetric(res, 'heart_rate').value!).toBeLessThanOrEqual(truth.meanHrBpm + 2);
+    expect(Math.abs(byMetric(res, 'hrv').value! - truth.rmssdMs)).toBeLessThan(10);
+  });
+
+  // Breathing (v0.4) needs two independent respiratory signals to agree
+  // (respiration.ts). On seed 1 only one is clear (RIFV clarity 0.47 < 0.5),
+  // so it abstains instead of reporting; v0.3 reported a rate from one
+  // signal and gave a rate on about 30% of no-breathing signals. The rule
+  // here: a reported rate is within 2 /min, and most seeds report one.
+  it('reports breathing on most high-SNR seeds and is never wrong when it does', () => {
+    let reported = 0;
+    for (const seed of [1, 2, 3, 4]) {
       const truth = syntheticSession({ heartRateBpm: 66, breathingPerMin: 15, noise: 0.03, seed });
       const res = analyzeSession(truth.frames);
+      const br = byMetric(res, 'breathing_rate');
+      if (br.value === null) {
+        expect(br.reason).toBe('low_signal_quality');
+        expect(res.outcome).toBe('partial');
+        continue;
+      }
+      reported++;
       expect(res.outcome).toBe('completed');
-      expect(byMetric(res, 'heart_rate').value!).toBeGreaterThanOrEqual(truth.meanHrBpm - 2);
-      expect(byMetric(res, 'heart_rate').value!).toBeLessThanOrEqual(truth.meanHrBpm + 2);
-      expect(Math.abs(byMetric(res, 'hrv').value! - truth.rmssdMs)).toBeLessThan(10);
-      expect(
-        Math.abs(byMetric(res, 'breathing_rate').value! - truth.breathingPerMin),
-      ).toBeLessThanOrEqual(2);
-    },
-  );
+      expect(Math.abs(br.value - truth.breathingPerMin)).toBeLessThanOrEqual(2);
+    }
+    expect(reported).toBeGreaterThanOrEqual(3);
+  });
 
   it('abstains from HRV when SNR is too low for reliable beat timing', () => {
     const res = analyzeSession(syntheticSession({ noise: 0.15, seed: 1 }).frames);
