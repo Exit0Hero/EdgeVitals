@@ -3,6 +3,7 @@ import { HR_FUSION, fuseHeartRate } from '../src/hrFusion';
 import { analyzeSession } from '../src/pipeline';
 import type { PulseCandidate, RppgMethod, SignalRegion } from '../src/rppg';
 import { gauss, labelFrames, mulberry32, syntheticFaceSession } from '../validation/synthetic';
+import { phoneNoiseRegionsSession } from './fixtures/phoneNoise';
 
 // All recordings here are SYNTHETIC. They check the fusion rules (agree,
 // abstain, never force a value), not accuracy on people.
@@ -131,5 +132,48 @@ describe('heart-rate fusion (synthetic)', () => {
     const hr = hrOf({ seed: 51, durationSec: 60, heartRateBpm: 70, dropProbability: 0.05 });
     expect(hr.status).toBe('valid');
     expect(Math.abs(hr.value! - 70)).toBeLessThan(2);
+  });
+
+  // v0.4.0 read a heart rate from these two pulseless captures (independent
+  // phone-like noise in each region): the stability-weighted fusion of 12
+  // candidates produced a 16/18 and a 27/33 window consensus that no single
+  // method carried. v0.4.1 requires a carrying method.
+  it.each([
+    [51007, 45.75],
+    [51019, 75],
+  ])('reports no heart rate from per-region noise (seed %i, %f s)', (seed, durationSec) => {
+    const res = analyzeSession(phoneNoiseRegionsSession({ seed, durationSec }));
+    const hr = res.metrics.find((m) => m.metric === 'heart_rate')!;
+    expect(hr.value).toBeNull();
+  });
+
+  it('reports no heart rate from 40 per-region noise captures of 45-75 s', () => {
+    let accepted = 0;
+    for (let s = 0; s < 40; s++) {
+      const res = analyzeSession(
+        phoneNoiseRegionsSession({ seed: 700000 + s, durationSec: 45 + (s % 3) * 15 }),
+      );
+      if (res.metrics.find((m) => m.metric === 'heart_rate')!.status === 'valid') accepted++;
+    }
+    expect(accepted).toBe(0);
+  });
+
+  it('still reads weak in-phase pulses in per-region noise', () => {
+    let read = 0;
+    for (let s = 0; s < 10; s++) {
+      const bpm = 55 + s * 8;
+      const res = analyzeSession(
+        phoneNoiseRegionsSession({
+          seed: 710000 + s,
+          durationSec: 60,
+          pulse: { bpm, amplitude: 0.0008 },
+        }),
+      );
+      const hr = res.metrics.find((m) => m.metric === 'heart_rate')!;
+      if (hr.status !== 'valid') continue;
+      read++;
+      expect(Math.abs(hr.value! - bpm)).toBeLessThanOrEqual(3);
+    }
+    expect(read).toBeGreaterThanOrEqual(7);
   });
 });

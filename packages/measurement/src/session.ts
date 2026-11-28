@@ -51,6 +51,7 @@ export class ScanSession {
   private frames: FrameSample[] = [];
   private startT: number | null = null;
   private lastInterimAt = 0;
+  private fullLookDone = false;
   private interimHr: number | null = null;
   private interimHrv: number | null = null;
   private interimBreathing: number | null = null;
@@ -132,7 +133,14 @@ export class ScanSession {
       last.t - this.lastInterimAt > 2000
     ) {
       this.lastInterimAt = last.t;
-      const res = analyzeSession(this.frames, { interim: true });
+      // The first look past the target length decides whether the scan ends
+      // there, so it fuses every region like the final analysis (about 5x
+      // the work of a pooled-ROI look). Only one such look is made: every
+      // extra all-region look is another chance for noise to pass.
+      const decide =
+        usableSec >= this.targetUsableSec && this.interimHr === null && !this.fullLookDone;
+      if (decide) this.fullLookDone = true;
+      const res = analyzeSession(this.frames, { interim: true, interimRegions: decide });
       const currentValue = (metric: MetricId) => {
         const result = res.metrics.find((m) => m.metric === metric);
         return result?.status === 'valid' ? result.value : null;

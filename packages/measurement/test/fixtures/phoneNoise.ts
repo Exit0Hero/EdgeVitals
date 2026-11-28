@@ -15,6 +15,8 @@ export function phoneNoiseSession(o: {
   scale?: number;
   ar?: number;
   pulse?: { bpm: number; amplitude: number };
+  /** Pulse start phase, radians (default random). */
+  phase?: number;
 }): FrameSample[] {
   const rng = mulberry32(o.seed);
   const fps = o.fps ?? 20;
@@ -26,7 +28,8 @@ export function phoneNoiseSession(o: {
   const slow = [0.0006, 0.0006, 0.0008];
   const st = [0, 0, 0];
   const frames: FrameSample[] = [];
-  let phase = rng() * 2 * Math.PI;
+  const randomPhase = rng() * 2 * Math.PI;
+  let phase = o.phase ?? randomPhase;
   for (let i = 0; i < n; i++) {
     const t = i / fps;
     // Shared factors give the cross-channel correlation.
@@ -60,4 +63,41 @@ export function phoneNoiseSession(o: {
     });
   }
   return frames;
+}
+
+/**
+ * Phone-like noise with an independent noise draw in each of the three skin
+ * regions (forehead, left and right cheek), pooled ROI = their mean. Each
+ * region is noisier by sqrt(3), as a third of the pixels would be. The pulse,
+ * if any, is the same in all regions. SYNTHETIC.
+ */
+export function phoneNoiseRegionsSession(o: {
+  seed: number;
+  durationSec?: number;
+  pulse?: { bpm: number; amplitude: number };
+}): FrameSample[] {
+  const parts = [0, 1, 2].map((k) =>
+    phoneNoiseSession({
+      seed: o.seed * 3 + k,
+      durationSec: o.durationSec,
+      scale: Math.sqrt(3),
+      pulse: o.pulse,
+      // One pulse: the same phase in every region.
+      phase: mulberry32(o.seed)() * 2 * Math.PI,
+    }),
+  );
+  return parts[0]!.map((f, i) => {
+    const regs = parts.map((p) => p[i]!.roi!);
+    const avg = (c: 'r' | 'g' | 'b') => regs.reduce((s, r) => s + r[c], 0) / 3;
+    return {
+      ...f,
+      roi: {
+        ...f.roi!,
+        r: avg('r'),
+        g: avg('g'),
+        b: avg('b'),
+        regions: regs.map((r) => ({ r: r.r, g: r.g, b: r.b, n: 1000, luma: 140, clipped: 0 })),
+      },
+    };
+  });
 }

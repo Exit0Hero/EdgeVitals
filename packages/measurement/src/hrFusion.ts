@@ -63,8 +63,11 @@ import type { UnavailableReason } from './types';
 
 export const HR_FUSION = {
   algorithm: 'rppg-fusion-welch',
-  version: '0.1.0',
+  version: '0.1.1',
   methods: ['pos_v2', 'chrom', 'pbv'] as readonly RppgMethod[],
+  stabilityLeaveOneOut: false as boolean,
+  /** Signal regions whose candidates enter the fusion. */
+  regions: ['combined', 'forehead', 'left_cheek', 'right_cheek'] as SignalRegion[],
   band: PIPELINE_CONFIG.hrBandHz,
   windowSec: 10,
   hopSec: 2,
@@ -81,10 +84,26 @@ export const HR_FUSION = {
    * the most stable candidate. With 0.55 + 6/w and 18 windows none passed,
    * and the closest was 0.05 below the bar. Weak simulated pulses (0.08% of
    * skin brightness): 76% read at 45 s, 88% at 75 s. See docs/adr/0011.
+   *
+   * v0.4.1: those captures had one pooled ROI. With independent phone-like
+   * noise in each of the three regions (12 fused candidates) the 6/w bar
+   * still let about 0.7% of pulseless scans through (11 of 1,500 looks),
+   * just above the bar. Hence 6.5/w plus minCarryingMethodAgreement.
    */
   minWindows: 18,
   consensusBase: 0.55,
-  consensusPerWindow: 6,
+  consensusPerWindow: 6.5,
+  /**
+   * The windowed path also needs one method on its own (its regions fused
+   * with equal weight, no stability weighting) to agree with the fused rate
+   * in at least this share of clean windows. A real pulse is carried by at
+   * least one extractor; a consensus that only appears after stability-
+   * weighted mixing of many noisy candidates is selection, not a pulse. In
+   * the 11 pulseless acceptances above the best single method agreed in
+   * 0.39-0.89 of windows (median 0.64); in accepted weak pulses 0.55-1
+   * (10th percentile 0.76).
+   */
+  minCarryingMethodAgreement: 0.7,
   minConsensusSnrDb: PIPELINE_CONFIG.minHrSnrDb,
   /** Above this share of artefact windows the capture is too disturbed for either path. */
   maxArtefactShare: 0.5,
@@ -129,6 +148,7 @@ export type HrFusionFailure =
   | 'regions_disagree'
   | 'autocorrelation_disagrees'
   | 'paths_disagree'
+  | 'no_carrying_method'
   | 'beats_irregular'
   | 'out_of_range';
 
@@ -163,6 +183,8 @@ export interface HrFusionResult {
     agreement: number;
     required: number;
     octaveCorrections: number;
+    /** Each clean window's vote, bpm (null: no in-band peak), in time order. */
+    votes: (number | null)[];
     bpm: number | null;
     passed: boolean;
   };
@@ -323,7 +345,9 @@ export function fuseHeartRate(
   artefacts: WindowArtefacts,
   artefactMask?: boolean[],
 ): HrFusionResult {
-  const used = candidates.filter((c) => F.methods.includes(c.method));
+  const used = candidates.filter(
+    (c) => F.methods.includes(c.method) && (F.regions as readonly string[]).includes(c.region),
+  );
   const n = used[0]?.pulse.length ?? 0;
   const durationSec = n / fs;
   const empty: HrFusionResult = {
@@ -342,6 +366,7 @@ export function fuseHeartRate(
       agreement: 0,
       required: 1,
       octaveCorrections: 0,
+      votes: [],
       bpm: null,
       passed: false,
     },
@@ -397,7 +422,24 @@ export function fuseHeartRate(
     const c = consensus(own);
     return c && own.length ? c.agreeing / own.length : 0;
   });
-  const fusedWindows = perWindow.map((specs) => fuse(specs, stability)!);
+  // Leave-one-out: a window's vote is weighted by each candidate's stability
+  // over the OTHER windows, so a candidate is not up-weighted for agreeing
+  // with itself in the window being judged.
+  const ownPeaks = used.map((_, ci) =>
+    perWindow.map((specs) => {
+      const f = specs[ci]!.peakHz;
+      return f === null ? -1000 : f * 60;
+    }),
+  );
+  const looStability = (wi: number) =>
+    ownPeaks.map((own) => {
+      const others = own.filter((_, j) => j !== wi);
+      const c = consensus(others);
+      return c && others.length ? c.agreeing / others.length : 0;
+    });
+  const fusedWindows = perWindow.map((specs, wi) =>
+    fuse(specs, F.stabilityLeaveOneOut ? looStability(wi) : stability)!,
+  );
   // A window whose fused spectrum has no in-band peak (all-zero signal) casts
   // a vote that agrees with nothing, so it still counts against agreement.
   let votes = fusedWindows.map((s) => {
@@ -554,6 +596,8 @@ export function fuseHeartRate(
   for (const m of methodsPresent) methods[m] = groupSupport('method', m, target);
   const regions: HrFusionResult['regions'] = {};
   for (const r of regionsPresent) regions[r] = groupSupport('region', r, target);
+  const carrying = Math.max(0, ...Object.values(methods).map((m) => m?.agreement ?? 0));
+  const windowedPassed = windowedPassedRaw && carrying >= F.minCarryingMethodAgreement;
 
   const result: HrFusionResult = {
     ...empty,
@@ -564,8 +608,9 @@ export function fuseHeartRate(
       agreement: round(agreement, 3),
       required: round(required, 3),
       octaveCorrections,
+      votes: votes.map((v) => (v < 0 ? null : round(v, 1))),
       bpm: windowsBpm === null ? null : round(windowsBpm, 1),
-      passed: windowedPassedRaw,
+      passed: windowedPassed,
     },
     spectral: {
       bpm: spectralBpm === null ? null : round(spectralBpm, 1),
@@ -604,8 +649,9 @@ export function fuseHeartRate(
     failure,
   });
 
-  if (!windowedPassedRaw && !spectralPassedRaw) {
+  if (!windowedPassed && !spectralPassedRaw) {
     if (spectralBpm === null && windowsBpm === null) return abstain('no_peak');
+    if (windowedPassedRaw) return abstain('no_carrying_method');
     if (clean >= F.minWindows && cons && agreement < required) return abstain('windows_disagree');
     if (
       spectralBeats &&

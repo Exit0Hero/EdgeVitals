@@ -196,6 +196,13 @@ export interface AnalyzeOptions {
    */
   interim?: boolean;
   /**
+   * With `interim`: still fuse every usable region, as the final analysis
+   * does. The session uses it for the finish decision once the target length
+   * is reached, so that a scan the final analysis would accept is not
+   * extended just because the pooled ROI alone fell short.
+   */
+  interimRegions?: boolean;
+  /**
    * Keep detected beat times (seconds on the capture clock) in
    * diagnostics.prv.beatTimesSec, for the offline validation harness.
    */
@@ -289,7 +296,7 @@ export function analyzeSession(frames: FrameSample[], opts: AnalyzeOptions = {})
     // Interim (live) updates use the pooled ROI only, to keep the JS thread
     // light; the final analysis adds every usable region.
     const regions =
-      acq.regions && !opts.interim
+      acq.regions && (!opts.interim || opts.interimRegions)
         ? regionSeries(seg, acq.regions.usable, series.t0, fs, r.length)
         : [];
     const candidates = buildCandidates({ r, g, b }, regions, fs, HR_FUSION.methods);
