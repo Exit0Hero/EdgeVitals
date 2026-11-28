@@ -18,6 +18,12 @@ const METRICS = [
   { id: 'energy', label: 'Energy', title: 'Energy', unit: '' },
   { id: 'hrv', label: 'HRV', title: 'HRV · morning scans', unit: 'ms' },
   { id: 'heart_rate', label: 'Heart rate', title: 'Heart rate · morning scans', unit: 'bpm' },
+  {
+    id: 'breathing_rate',
+    label: 'Breathing',
+    title: 'Breathing rate · morning scans',
+    unit: '/min',
+  },
 ] as const;
 type MetricId = (typeof METRICS)[number]['id'];
 type Period = '7d' | '30d' | '90d';
@@ -65,8 +71,10 @@ export default function Trends() {
   const rhrTag = rhr ? relativeLabel(rhr.relative) : null;
   // Newest blood pressure in the period: cuff, health app or licensed SDK.
   const bp = data?.summaries.blood_pressure;
-  // Newest SpO2 from the user's own devices via their health app (ADR 0009).
+  // Newest SpO2: the user's own devices via their health app (ADR 0009), or
+  // the opt-in experimental face-scan estimate (ADR 0008).
   const spo2 = data?.summaries.spo2 ?? null;
+  const spo2Camera = spo2?.source === 'camera_experimental';
   const bpSource =
     bp?.source === 'cuff'
       ? 'Typed in from your cuff'
@@ -332,7 +340,9 @@ export default function Trends() {
                   <T variant="body">SpO₂</T>
                   {spo2 ? (
                     <T variant="tiny" color={colors.muted} testID="spo2-source">
-                      {sourceLabel(spo2.source_detail)}
+                      {spo2.source_detail
+                        ? sourceLabel(spo2.source_detail)
+                        : 'Experimental face-scan estimate'}
                     </T>
                   ) : null}
                   <Pressable
@@ -352,7 +362,11 @@ export default function Trends() {
                       {`${spo2.value}%`}
                     </T>
                     <View style={{ width: 90, alignItems: 'flex-end' }}>
-                      <StatusPill label="Your device" tone="muted" />
+                      {spo2Camera ? (
+                        <StatusPill label="Experimental" tone="warning" />
+                      ) : (
+                        <StatusPill label="Your device" tone="muted" />
+                      )}
                     </View>
                   </>
                 ) : (

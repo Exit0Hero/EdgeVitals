@@ -127,6 +127,9 @@ test('a mature history shows scores, a trend chart and an insight', async ({ pag
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   expect(axe.violations.map((v) => v.id)).toEqual([]);
 
+  await page.getByTestId('metric-breathing_rate').click();
+  await expect(page.getByTestId('trend-average')).toContainText('/min');
+
   await page.getByTestId('metric-recovery').click();
   await expect(page.getByTestId('trend-average')).not.toHaveText('—');
   await api.dispose();

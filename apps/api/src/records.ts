@@ -11,7 +11,8 @@ export async function loadRecords(
     `SELECT a.id, a.kind, a.status, a.started_at, a.timezone, a.demo,
             c.kind AS ci_kind, c.sleep_quality, c.energy_rating, c.stress_rating, c.alcohol_previous_evening,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('metric', m.metric, 'status', m.status, 'value', m.value_numeric,
-                                                   'valueSecondary', m.value_secondary, 'method', m.method, 'algorithm', m.algorithm_name))
+                                                   'valueSecondary', m.value_secondary, 'method', m.method, 'algorithm', m.algorithm_name,
+                                                   'reason', m.reason))
                         FROM measurements m WHERE m.assessment_id = a.id), '[]') AS measurements
        FROM assessments a LEFT JOIN check_ins c ON c.assessment_id = a.id
       WHERE a.user_id = $1 AND a.status IN ('completed', 'partial', 'failed', 'cancelled')

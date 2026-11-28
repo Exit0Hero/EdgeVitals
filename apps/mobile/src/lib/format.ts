@@ -69,11 +69,71 @@ export function relativeLabel(r: RelativeStatus): { label: string; tone: Tone } 
   }
 }
 
+/** Short note shown in place of a missing value. Older records without a reason say "No reliable reading". */
 export const REASON_COPY: Record<string, string> = {
   unsupported_method: 'Not available',
   insufficient_duration: 'Scan too short',
-  low_signal_quality: 'No reliable reading',
-  inconsistent_estimates: 'No reliable reading',
-  out_of_operating_range: 'No reliable reading',
+  low_signal_quality: 'Signal too weak',
+  inconsistent_estimates: 'Estimates disagreed',
+  out_of_operating_range: 'Out of range',
   cancelled: 'Cancelled',
 };
+
+export interface MissingVital {
+  metric: string;
+  status: string;
+  reason?: string | null;
+  method?: string | null;
+}
+
+/**
+ * One plain sentence on why a vital has no value and what the person can do.
+ * Null for valid values and cancelled scans. Never implies a health finding.
+ */
+export function missingExplanation(
+  v: MissingVital,
+  ctx: { heartRateValid: boolean; fingerScan: boolean },
+): string | null {
+  if (v.status === 'valid' || v.status === 'simulated' || v.reason === 'cancelled') return null;
+  const r = v.reason ?? 'low_signal_quality';
+  const tooShort = 'There was not enough steady signal. Keep still until the scan ends.';
+  switch (v.metric) {
+    case 'heart_rate':
+      return r === 'insufficient_duration'
+        ? tooShort
+        : 'The pulse in the camera signal was too weak or unsteady to count reliably.';
+    case 'hrv':
+      if (!ctx.heartRateValid) return null;
+      if (r === 'insufficient_duration')
+        return 'HRV needs a longer steady stretch than heart rate. Keep still until the scan ends.';
+      if (r === 'inconsistent_estimates')
+        return 'The timing of the individual beats did not match the heart rate, so HRV was withheld.';
+      if (r === 'out_of_operating_range')
+        return 'The HRV estimate fell outside the range the app can measure, so it was withheld.';
+      return 'Heart rate passed, but HRV needs the exact timing of every beat and this signal was not clean enough. A steadier scan helps.';
+    case 'breathing_rate':
+      if (!ctx.heartRateValid && r !== 'insufficient_duration') return null;
+      if (r === 'insufficient_duration')
+        return 'Breathing rate needs a longer steady stretch. Keep still until the scan ends.';
+      if (r === 'inconsistent_estimates')
+        return 'Two independent breathing estimates disagreed, so neither is shown.';
+      return 'The breathing rhythm was not clear enough in the signal. Breathe normally and keep still.';
+    case 'spo2':
+      if (v.method === 'licensed_sdk' || v.method === 'camera_experimental') {
+        if (r === 'out_of_operating_range')
+          return 'The experimental SpO₂ estimate came out outside the 90–100% it can report, so it was withheld. It cannot detect low oxygen: use a pulse oximeter if you are concerned.';
+        if (r === 'insufficient_duration')
+          return 'The experimental SpO₂ estimate needs a longer steady scan.';
+        return 'The experimental SpO₂ estimate needs a clearer pulse than this scan had.';
+      }
+      return ctx.fingerScan || v.method === 'finger_ppg'
+        ? "The finger scan does not estimate SpO₂: the published camera method is calibrated for daylight on the face, not the phone's flash. Sync a pulse oximeter from your health app to see SpO₂ here."
+        : 'Camera SpO₂ is off. You can turn on the experimental estimate in Settings, under Experimental estimates, or sync a pulse oximeter from your health app.';
+    case 'blood_pressure':
+      return v.method === 'licensed_sdk'
+        ? 'The camera blood-pressure estimate needs a clearer signal than this scan had.'
+        : 'The phone camera cannot measure blood pressure. Log a reading from your cuff, or sync one from your health app.';
+    default:
+      return null;
+  }
+}

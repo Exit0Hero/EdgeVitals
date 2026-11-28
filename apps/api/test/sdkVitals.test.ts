@@ -106,6 +106,23 @@ describe('licensed SDK vitals (ADR 0007)', () => {
     expect(
       d.last_assessment.metrics.find((m: { metric: string }) => m.metric === 'spo2'),
     ).toMatchObject({ value: 97, method: 'camera_experimental' });
+    // A missing value carries its reason so Today can say why.
+    expect(
+      d.last_assessment.metrics.find((m: { metric: string }) => m.metric === 'hrv'),
+    ).toMatchObject({ value: null, reason: 'low_signal_quality' });
+    // Trends shows the newest experimental SpO2, labelled by its source.
+    const t = (
+      await ctx.app.inject({
+        url: '/api/v1/trends?metric=breathing_rate&period=7d',
+        headers: u.auth,
+      })
+    ).json();
+    expect(t.unit).toBe('/min');
+    expect(t.summaries.spo2).toMatchObject({
+      value: 97,
+      source: 'camera_experimental',
+      source_detail: null,
+    });
   });
 
   it('enforces the same rules in the database', async () => {

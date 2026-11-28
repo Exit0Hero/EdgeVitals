@@ -5,6 +5,7 @@ import { api, ApiError, type Assessment, type Dashboard } from '../../api/client
 import { AssessmentHeader } from '../../components/AssessmentHeader';
 import { FingerPulseCard } from '../../components/FingerPulseCard';
 import { Icon } from '../../components/Icon';
+import { MissingVitals } from '../../components/MissingVitals';
 import { ScanDetails } from '../../components/ScanDetails';
 import { SyncedVitals } from '../../components/SyncedVitals';
 import {
@@ -296,6 +297,7 @@ export default function Results() {
       <Card style={{ paddingVertical: space[1], marginBottom: space[5] }} testID="results-vitals">
         <VitalRows vitals={vitals} />
       </Card>
+      {!a.demo ? <MissingVitals vitals={a.measurements} fingerScan={fingerScan} /> : null}
       {!a.demo && fingerScan && scanResult ? <FingerPulseCard result={scanResult} /> : null}
       {!a.demo ? <SyncedVitals /> : null}
       {!a.demo ? (
